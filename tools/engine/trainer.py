@@ -111,6 +111,7 @@ class Trainer(object):
                 self.logger.info(f'valid dataloader build failed: {e}')
                 self.valid_dataloader = None
 
+        self.pl_charset_adapter = None
         if task == 'rec':
             self._init_rec_model()
         elif task == 'det':
@@ -155,7 +156,7 @@ class Trainer(object):
                 self.model, [self.local_rank], find_unused_parameters=False)
 
         # amp
-        self.scaler = (torch.amp.GradScaler() if self.cfg['Global'].get(
+        self.scaler = (torch.cuda.amp.GradScaler() if self.cfg['Global'].get(
             'use_amp', False) else None)
 
         self.logger.info(
@@ -167,9 +168,38 @@ class Trainer(object):
         from openrec.modeling import build_model as build_rec_model
         from openrec.postprocess import build_post_process as build_rec_post_process
 
+        # CCD mode: extend charset with Unicode variants before building post_process
+        unicode_mapping_path = self.cfg['Global'].get('unicode_mapping', None)
+        if unicode_mapping_path:
+            from tools.utils.charset_utils import build_pl_charset, PLCharsetAdapter, generate_extended_dict
+            base_dict_path = self.cfg['Global']['character_dict_path']
+            ext_dict_path = generate_extended_dict(base_dict_path, unicode_mapping_path)
+            self.cfg['Global']['character_dict_path'] = ext_dict_path
+            # Also update any LabelEncode transforms that reference the dict
+            for section in ('Train', 'Eval'):
+                if section in self.cfg and 'dataset' in self.cfg[section]:
+                    transforms = self.cfg[section]['dataset'].get('transforms', [])
+                    for t in transforms:
+                        if isinstance(t, dict):
+                            for name, params in t.items():
+                                if 'Encode' in name and isinstance(params, dict) and 'character_dict_path' in params:
+                                    params['character_dict_path'] = ext_dict_path
+            self.logger.info(f'CCD mode: extended dict at {ext_dict_path}')
+
         # build post process
         self.post_process_class = build_rec_post_process(
             self.cfg['PostProcess'], self.cfg['Global'])
+
+        # CCD mode: build PLCharsetAdapter for eval
+        self.pl_charset_adapter = None
+        if unicode_mapping_path:
+            _, ext_to_base = build_pl_charset(base_dict_path, unicode_mapping_path)
+            # Target charset = base charset (from original dict)
+            with open(base_dict_path, 'r', encoding='utf-8') as f:
+                base_chars = [line.strip() for line in f.readlines()]
+            self.pl_charset_adapter = PLCharsetAdapter(''.join(base_chars), ext_to_base)
+            self.logger.info(f'CCD mode: PLCharsetAdapter with {len(ext_to_base)} extended chars')
+
         # build model
         # for rec algorithm
         self.use_transformers = self.cfg['Global'].get('use_transformers',
@@ -389,6 +419,10 @@ class Trainer(object):
                     post_result = self.post_process_class(preds,
                                                           batch_numpy,
                                                           training=True)
+                    if self.pl_charset_adapter is not None and isinstance(post_result, tuple):
+                        preds_list, labels_list = post_result
+                        preds_list = [(self.pl_charset_adapter(text), conf) for text, conf in preds_list]
+                        post_result = (preds_list, labels_list)
                     self.eval_class(post_result, batch_numpy, training=True)
                     metric = self.eval_class.get_metric()
                     train_stats.update(metric)
@@ -560,6 +594,11 @@ class Trainer(object):
                 # Obtain usable results from post-processing methods
                 # Evaluate the results of the current batch
                 post_result = self.post_process_class(preds, batch_numpy)
+                # CCD mode: map extended Unicode chars back to base chars
+                if self.pl_charset_adapter is not None and isinstance(post_result, tuple):
+                    preds_list, labels_list = post_result
+                    preds_list = [(self.pl_charset_adapter(text), conf) for text, conf in preds_list]
+                    post_result = (preds_list, labels_list)
                 self.eval_class(post_result, batch_numpy)
 
                 pbar.update(1)

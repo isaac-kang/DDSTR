@@ -1,0 +1,150 @@
+# DDSTR CCD mode: SVTRv2 RCTC trained on CCD-decomposed data
+# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_rctc_ccd.yml
+#
+# CCD extends the charset with Unicode variants for confused character classes.
+# The model trains with an extended charset; during eval, PLCharsetAdapter maps
+# extended chars back to base chars for proper comparison.
+#
+# Key config additions vs baseline:
+#   - Global.unicode_mapping: path to unicode_mapping.json (triggers CCD mode in trainer)
+#   - Train data_dir_list: points to CCD-decomposed LMDBs
+#
+# To generate CCD data:
+#   python tools/confusion_and_pl.py -c configs/rec/svtrv2/svtrv2_rctc.yml --checkpoint <ckpt>
+
+Global:
+  device: gpu
+  epoch_num: 20
+  log_smooth_window: 20
+  print_batch_step: 10
+  output_dir: ./output/rec/ddstr/svtrv2_rctc_ccd/
+  save_epoch_step: [15, 1]
+  eval_epoch_step: [0, 1]
+  eval_batch_step: [0, 500]
+  cal_metric_during_train: True
+  pretrained_model:
+  checkpoints:
+  use_tensorboard: false
+  infer_img:
+  character_dict_path: &character_dict_path ./tools/utils/EN_symbol_dict.txt
+  max_text_length: &max_text_length 25
+  use_space_char: &use_space_char False
+  save_res_path: ./output/rec/ddstr/predicts_svtrv2_rctc_ccd.txt
+  use_amp: True
+  # CCD mode: unicode_mapping triggers extended charset + PLCharsetAdapter
+  unicode_mapping: ~/data/STR/ddstr/CCD/svtrv2_ctc/unicode_mapping.json
+
+Optimizer:
+  name: AdamW
+  lr: 0.00065
+  weight_decay: 0.05
+  filter_bias_and_bn: True
+
+LRScheduler:
+  name: OneCycleLR
+  warmup_epoch: 1.5
+  cycle_momentum: False
+
+Architecture:
+  model_type: rec
+  algorithm: SVTRv2
+  Transform:
+  Encoder:
+    name: SVTRv2LNConvTwo33
+    use_pos_embed: False
+    dims: [128, 256, 384]
+    depths: [6, 6, 6]
+    num_heads: [4, 8, 12]
+    mixer: [['Conv','Conv','Conv','Conv','Conv','Conv'],['Conv','Conv','FGlobal','Global','Global','Global'],['Global','Global','Global','Global','Global','Global']]
+    local_k: [[5, 5], [5, 5], [-1, -1]]
+    sub_k: [[1, 1], [2, 1], [-1, -1]]
+    last_stage: false
+    feat2d: True
+  Decoder:
+    name: RCTCDecoder
+
+Loss:
+  name: CTCLoss
+  zero_infinity: True
+
+PostProcess:
+  name: CTCLabelDecode
+
+Metric:
+  name: RecMetric
+  main_indicator: acc
+  is_filter: True
+
+Train:
+  dataset:
+    name: RatioDataSetTVResize
+    ds_width: True
+    padding: False
+    # CCD: point to decomposed LMDB (labels contain Unicode variant chars)
+    data_dir_list: [
+      '~/data/STR/ddstr/CCD/svtrv2_ctc/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/ddstr/CCD/svtrv2_ctc/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/ddstr/CCD/svtrv2_ctc/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/ddstr/CCD/svtrv2_ctc/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/ddstr/CCD/svtrv2_ctc/Union14M-L-LMDB-Filtered/filter_train_easy',
+    ]
+    transforms:
+      - DecodeImagePIL:
+          img_mode: RGB
+      - PARSeqAugPIL:
+      - CTCLabelEncode:
+          character_dict_path: *character_dict_path
+          use_space_char: *use_space_char
+          max_text_length: *max_text_length
+      - KeepKeys:
+          keep_keys: ['image', 'label', 'length']
+  sampler:
+    name: RatioSampler
+    scales: [[128, 32]]
+    first_bs: &bs 256
+    fix_bs: false
+    divided_factor: [4, 16]
+    is_training: True
+  loader:
+    shuffle: True
+    batch_size_per_card: *bs
+    drop_last: True
+    max_ratio: 4
+    num_workers: 4
+
+Eval:
+  dataset:
+    name: RatioDataSetTVResize
+    ds_width: True
+    padding: False
+    # Eval always uses original data
+    data_dir_list: [
+      '~/data/STR/openocr/evaluation/CUTE80',
+      '~/data/STR/openocr/evaluation/IC13_857',
+      '~/data/STR/openocr/evaluation/IC15_1811',
+      '~/data/STR/openocr/evaluation/IIIT5k',
+      '~/data/STR/openocr/evaluation/SVT',
+      '~/data/STR/openocr/evaluation/SVTP',
+      ]
+    transforms:
+      - DecodeImagePIL:
+          img_mode: RGB
+      - CTCLabelEncode:
+          character_dict_path: *character_dict_path
+          use_space_char: *use_space_char
+          max_text_length: *max_text_length
+      - KeepKeys:
+          keep_keys: ['image', 'label', 'length']
+  sampler:
+    name: RatioSampler
+    scales: [[128, 32]]
+    first_bs: 256
+    fix_bs: false
+    divided_factor: [4, 16]
+    is_training: False
+  loader:
+    shuffle: False
+    drop_last: False
+    batch_size_per_card: *bs
+    max_ratio: 4
+    num_workers: 4

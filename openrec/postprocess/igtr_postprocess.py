@@ -18,11 +18,11 @@ class IGTRLabelDecode(NRTRLabelDecode):
 
         if isinstance(preds, list):
             if isinstance(preds[0], dict):
-                preds = preds[-1].detach().cpu().numpy()
+                preds = preds[-1].detach().cpu().float().numpy()
                 if isinstance(preds, torch.Tensor):
-                    preds = preds.detach().cpu().numpy()
+                    preds = preds.detach().cpu().float().numpy()
                 elif isinstance(preds, dict):
-                    preds = preds['align'][-1].detach().cpu().numpy()
+                    preds = preds['align'][-1].detach().cpu().float().numpy()
                 else:
                     preds = preds
                 preds_idx = preds.argmax(axis=2)
@@ -31,16 +31,16 @@ class IGTRLabelDecode(NRTRLabelDecode):
                                    preds_prob,
                                    is_remove_duplicate=False)
             else:
-                preds_idx = preds[0].detach().cpu().numpy()
-                preds_prob = preds[1].detach().cpu().numpy()
+                preds_idx = preds[0].detach().cpu().float().numpy()
+                preds_prob = preds[1].detach().cpu().float().numpy()
                 text = self.decode(preds_idx,
                                    preds_prob,
                                    is_remove_duplicate=False)
         else:
             if isinstance(preds, torch.Tensor):
-                preds = preds.detach().cpu().numpy()
+                preds = preds.detach().cpu().float().numpy()
             elif isinstance(preds, dict):
-                preds = preds['align'][-1].detach().cpu().numpy()
+                preds = preds['align'][-1].detach().cpu().float().numpy()
             else:
                 preds = preds
             preds_idx = preds.argmax(axis=2)

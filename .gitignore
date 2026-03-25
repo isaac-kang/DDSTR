@@ -10,6 +10,7 @@ __pycache__/
 inference/
 inference_results/
 output/
+pretrained/
 e2e_results/
 rec_results/
 det_results/
