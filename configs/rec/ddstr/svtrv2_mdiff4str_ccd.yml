@@ -67,7 +67,7 @@ Architecture:
     autoregressive_decoding: False
     low_confidence_decoding: False
     random_mask_decoding: False
-    semi_autoregressive_decoding: False
+    semi_autoregressive_decoding: True
     cloze_mask_decoding: False
     sampler_step: 3
     sample_k: &sample_k 3

@@ -8,7 +8,7 @@ Supports 4 model types:
   - CTC (SVTRv2):   S(seq) = -CTCLoss(logits, seq) / T
   - AR (IGTR):      S(seq) = mean log P(y_t | y_{<t}, x) via AR mode
   - AR (PARSeq):    S(seq) = mean log P(y_t | y_{<t}, x) via AR decoding
-  - CMLM (MDiff):   S(seq) = mean log P(y_t | y_{\t}, x) via cloze masking
+  - BLC (MDiff):    S(seq) = (1/L) Σ_i log p_{τ_i}(y_i | x, z_{τ_i}) via shared-trace replay
 
 Output: TSV with columns (dataset, sample_idx, pred, gt, pred_mean_lp, gt_mean_lp)
 """
@@ -438,19 +438,27 @@ class PARSeqARScorer:
         return scores
 
 
-class MDiffCMLMScorer:
-    """S(seq) = mean log P(y_t | y_{\\t}, x) via cloze masking (PLL).
+class MDiffBLCSharedTraceScorer:
+    """S_π(y) = (1/L) Σ_i log p_{τ_i}(y_i | x, z_{τ_i}) via BLC shared-trace replay.
 
-    For each position, mask that position and get the model's prediction probability
-    for the actual token at that position.
+    BLC inference builds a trace where each position i is finalized at step τ_i.
+    The decoder accumulates: probs[b, i, :] = distribution at finalization step τ_i
+    (via `logits[masked_indices_pre] = pred_step[masked_indices_pre]` each step).
+
+    Scoring reads from this single shared trace tensor:
+      pred score: log p_{τ_i}(ŷ_i) for positions 0..EOS
+      gt score:   log p_{τ_i}(y_gt_i) at the same positions (same τ_i)
+
+    This isolates token preference from trajectory advantage: if gt were decoded
+    separately under LC/BLC, higher-confidence gt tokens would be remasked less,
+    giving gt a structural path advantage unrelated to label quality. Fixing the
+    pred trace eliminates this bias.
     """
 
     def __init__(self, post_process, device):
         self.device = device
         self.post_process = post_process
-        self.eos = 0
-        self.mask_token_id = len(post_process.character) - 2
-        self.ignore_index = len(post_process.character) - 1
+        self.eos_id = 0  # EOS token id in MDiff vocabulary
 
     def _encode_sequence(self, text):
         indices = []
@@ -459,79 +467,59 @@ class MDiffCMLMScorer:
                 indices.append(self.post_process.dict[ch])
         return indices
 
-    def _build_input_seq(self, token_indices, max_len, device):
-        """Build MDiff input: [token1, token2, ..., EOS, mask, mask, ...]"""
-        seq = torch.full((1, max_len + 1), self.mask_token_id, dtype=torch.long, device=device)
-        for i, tok in enumerate(token_indices):
-            if i < max_len + 1:
-                seq[0, i] = tok
-        eos_pos = len(token_indices)
-        if eos_pos < max_len + 1:
-            seq[0, eos_pos] = self.eos
-        return seq, eos_pos
-
-    def _score_sequence_pll(self, decoder, memory, token_indices, device):
-        """Compute PLL score for a sequence using cloze masking."""
-        max_len = decoder.max_len
-        full_seq, eos_pos = self._build_input_seq(token_indices, max_len, device)
-        seq_len = min(eos_pos + 1, max_len + 1)  # include EOS
-
-        log_probs = []
-        for pos in range(seq_len):
-            masked_seq = full_seq.clone()
-            original_token = masked_seq[0, pos].item()
-            masked_seq[0, pos] = self.mask_token_id
-
-            tgts = decoder.embedding(masked_seq)
-            tgts = decoder.positional_encoding(tgts) + decoder.pos_embed
-            for decoder_layer in decoder.decoder:
-                tgts = decoder_layer(tgts, memory, self_mask=None)
-            logits = decoder.tgt_word_prj(tgts)  # (1, L, C)
-            log_p = logits[0, pos].log_softmax(-1)
-            log_probs.append(log_p[original_token].item())
-
-        if log_probs:
-            return sum(log_probs) / len(log_probs)
-        return float('-inf')
-
     def score(self, model, images, labels):
-        """Returns (preds_text, pred_scores, gt_scores)."""
-        with torch.no_grad():
-            logits = model(images)
+        """Returns (preds_text, pred_scores, gt_scores).
 
-        probs = logits.softmax(-1)
+        probs: (B, L+1, C) — BLC trace, already softmaxed with temperature.
+        probs[b, i, :] is p_{τ_i}(· | x, z_{τ_i}) for position i.
+        """
+        with torch.no_grad():
+            probs = model(images)  # (B, L+1, C)
+
+        B, L1, C = probs.shape
+        device = probs.device
+
+        # Decode predictions
         probs_np = probs.detach().cpu().numpy()
         pred_results = self.post_process(probs_np)
         preds_text = [r[0] for r in pred_results]
 
-        # Get encoder output for scoring
-        x = images
-        if hasattr(model, 'transform') and model.transform is not None:
-            x = model.transform(x)
-        if hasattr(model, 'encoder') and model.encoder is not None:
-            x = model.encoder(x)
-        decoder = model.decoder
+        pred_token_ids = probs.argmax(-1)  # (B, L+1)
+        log_probs = probs.clamp(min=1e-10).log()  # (B, L+1, C)
 
-        bs = images.shape[0]
-        pred_scores = torch.zeros(bs)
-        gt_scores = torch.zeros(bs)
+        pred_scores = torch.zeros(B)
+        gt_scores = torch.zeros(B)
 
-        for b in range(bs):
-            memory = x[b:b+1]
+        for b in range(B):
+            # Determine valid positions from pred trace (0..EOS inclusive)
+            eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
+            eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
+            valid_len = eos_pos + 1  # includes EOS position
 
-            # Score pred
-            pred_indices = self._encode_sequence(preds_text[b])
-            if pred_indices:
-                pred_scores[b] = self._score_sequence_pll(decoder, memory, pred_indices, images.device)
-            else:
-                pred_scores[b] = float('-inf')
+            # Pred score: log p_{τ_i}(ŷ_i) for each position
+            pred_tok = pred_token_ids[b, :valid_len]
+            pred_log_p = log_probs[b, :valid_len].gather(1, pred_tok.unsqueeze(1)).squeeze(1)
+            pred_scores[b] = pred_log_p.mean()
 
-            # Score GT
+            # GT score: log p_{τ_i}(y_gt_i) at same positions (shared trace)
             gt_indices = self._encode_sequence(labels[b])
-            if gt_indices:
-                gt_scores[b] = self._score_sequence_pll(decoder, memory, gt_indices, images.device)
-            else:
+            gt_len = len(gt_indices)
+
+            if gt_len == 0:
                 gt_scores[b] = float('-inf')
+                continue
+
+            # Score up to min(valid_len, gt_len+1) positions.
+            # gt_len+1: include EOS at position gt_len if it falls within pred trace.
+            score_len = min(valid_len, gt_len + 1)
+            gt_tok = torch.zeros(score_len, dtype=torch.long, device=device)
+            gt_tok[:min(gt_len, score_len)] = torch.tensor(
+                gt_indices[:score_len], dtype=torch.long, device=device)
+            if score_len == gt_len + 1:
+                gt_tok[gt_len] = self.eos_id
+
+            gt_log_p = log_probs[b, :score_len].gather(1, gt_tok.unsqueeze(1)).squeeze(1)
+            gt_scores[b] = gt_log_p.mean()
 
         return preds_text, pred_scores, gt_scores
 
@@ -569,7 +557,7 @@ def detect_model_type(cfg):
     elif 'PARSeq' in decoder_name:
         return 'parseq_ar'
     elif 'MDiff' in decoder_name:
-        return 'mdiff_cmlm'
+        return 'mdiff_blc'
     else:
         raise ValueError(f'Unknown decoder type: {decoder_name}. '
                          f'Supported: CTCDecoder, RCTCDecoder, IGTRDecoder, PARSeqDecoder, MDiffDecoder')
@@ -583,8 +571,8 @@ def get_scorer(model_type, post_process, device):
         return IGTRARScorer(post_process, device)
     elif model_type == 'parseq_ar':
         return PARSeqARScorer(post_process, device)
-    elif model_type == 'mdiff_cmlm':
-        return MDiffCMLMScorer(post_process, device)
+    elif model_type == 'mdiff_blc':
+        return MDiffBLCSharedTraceScorer(post_process, device)
     else:
         raise ValueError(f'Unknown model type: {model_type}')
 
@@ -611,7 +599,7 @@ def main():
     parser.add_argument('--output', default=None,
                         help='Output TSV path (default: ~/data/STR/ddstr/error_info/{model_type}/error_info.tsv)')
     parser.add_argument('--model_type', default=None,
-                        help='Override model type detection (ctc, igtr_ar, parseq_ar, mdiff_cmlm)')
+                        help='Override model type detection (ctc, igtr_ar, parseq_ar, mdiff_blc)')
     args = parser.parse_args()
     args.data_root = str(Path(args.data_root).expanduser().resolve())
 
