@@ -108,6 +108,7 @@ Train:
           use_space_char: *use_space_char
           max_text_length: *max_text_length
           sample_num: *sample_k
+          train_all_layer: True
       - KeepKeys:
           keep_keys: ['image', 'label', 'reflect_ids', 'noisy_batch', 'masked_indices', 'p_mask', 'length']
   sampler:

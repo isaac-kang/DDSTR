@@ -1,5 +1,6 @@
 import io
 import math
+import os
 import random
 
 import cv2
@@ -86,6 +87,7 @@ class RatioDataSetTVResize(Dataset):
         lmdb_sets = {}
         dataset_idx = 0
         for dirpath, ratio in zip(data_dir_list, ratio_list):
+            dirpath = os.path.expanduser(dirpath)
             env = lmdb.open(dirpath,
                             max_readers=32,
                             readonly=True,
