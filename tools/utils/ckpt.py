@@ -69,15 +69,19 @@ def load_ckpt(model, cfg, optimizer=None, lr_scheduler=None, logger=None):
         status["global_step"] = checkpoint["global_step"]
         status["epoch"] = checkpoint["epoch"] + 1
         status["metrics"] = checkpoint["metrics"]
-    elif pretrained_model and os.path.exists(pretrained_model):
-        load_pretrained_params(model, pretrained_model, logger)
+    elif pretrained_model:
+        pretrained_model = os.path.expanduser(pretrained_model)
+        if not os.path.exists(pretrained_model):
+            raise FileNotFoundError(f"pretrained_model not found: {pretrained_model}")
+        fresh_params = cfg["Global"].get("fresh_params", None)
+        load_pretrained_params(model, pretrained_model, logger, fresh_params=fresh_params)
         logger.info(f"finetune from checkpoint {pretrained_model}")
     else:
         logger.info("train from scratch")
     return status
 
 
-def load_pretrained_params(model, pretrained_model, logger):
+def load_pretrained_params(model, pretrained_model, logger, fresh_params=None):
     if pretrained_model.endswith(".safetensors"):
         from safetensors.torch import load_file
         logger.info(f"Loading weights from safetensors: {pretrained_model}")
@@ -90,6 +94,12 @@ def load_pretrained_params(model, pretrained_model, logger):
         state_dict = checkpoint["state_dict"]
     else:
         state_dict = checkpoint
+
+    if fresh_params:
+        skipped = [k for k in state_dict if any(k.startswith(p) for p in fresh_params)]
+        if skipped:
+            logger.info(f"fresh_params: keeping random init for {skipped}")
+        state_dict = {k: v for k, v in state_dict.items() if k not in skipped}
 
     model.load_state_dict(state_dict, strict=False)
     model_keys = model.state_dict().keys()

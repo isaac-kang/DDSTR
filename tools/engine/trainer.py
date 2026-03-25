@@ -340,8 +340,28 @@ class Trainer(object):
             self.cfg['Train']['sampler'][
                 'resume_iter'] = self.resume_iter - last_whole_epoch_global_step
 
+        fresh_param_prefixes = self.cfg['Global'].get('fresh_params', [])
+        freeze_epochs = self.cfg['Global'].get('freeze_epochs', 1.5)
+
         last_whole_epoch_global_step = 0
         for epoch in range(start_epoch, epoch_num + 1):
+            # freeze backbone during warmup, unfreeze after
+            if freeze_epochs > 0 and fresh_param_prefixes:
+                base_model = self.model.module if self.cfg['Global']['distributed'] else self.model
+                if epoch <= freeze_epochs:
+                    for name, param in base_model.named_parameters():
+                        is_fresh = any(name.startswith(p) for p in fresh_param_prefixes)
+                        param.requires_grad_(is_fresh)
+                    if is_main_process() and epoch == start_epoch:
+                        self.logger.info(
+                            f'freeze_warmup: backbone FROZEN for epochs 1-{freeze_epochs}, '
+                            f'training only {fresh_param_prefixes}')
+                elif epoch == int(freeze_epochs) + 1:
+                    for param in base_model.parameters():
+                        param.requires_grad_(True)
+                    if is_main_process():
+                        self.logger.info(f'freeze_warmup: epoch {epoch} — backbone UNFROZEN, training all params')
+
             if not self.cfg['Global'].get('resume_from_iter',
                                           False):  # for unirec resume training
                 if 'sampler' in self.cfg['Train']:

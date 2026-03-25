@@ -16,6 +16,12 @@ from tools.utility import ArgsParser
 
 def parse_args():
     parser = ArgsParser()
+    parser.add_argument(
+        '--groups',
+        type=str,
+        default=None,
+        help='comma-separated group indices to evaluate: 0=6bench, 1=u14m, 2=OST, 3=others. '
+             'Default: all groups.')
     args = parser.parse_args()
     return args
 
@@ -23,6 +29,7 @@ def parse_args():
 def main():
     FLAGS = parse_args()
     cfg = Config(FLAGS.config)
+    groups_arg = FLAGS.groups
     FLAGS = vars(FLAGS)
     opt = FLAGS.pop('opt')
     cfg.merge_dict(FLAGS)
@@ -51,18 +58,30 @@ def main():
     for k, v in best_model_dict.items():
         trainer.logger.info('{}:{}'.format(k, v))
 
+    data_root = os.path.expanduser(
+        os.environ.get('EVAL_DATA_ROOT', '~/data/STR/openocr'))
     data_dirs_list = [
         [
-            '../test/IIIT5k/', '../test/SVT/', '../test/IC13_857/',
-            '../test/IC15_1811/', '../test/SVTP/', '../test/CUTE80/'
+            f'{data_root}/test/IIIT5k/', f'{data_root}/test/SVT/',
+            f'{data_root}/test/IC13_857/', f'{data_root}/test/IC15_1811/',
+            f'{data_root}/test/SVTP/', f'{data_root}/test/CUTE80/'
         ],
         [
-            '../u14m/curve/', '../u14m/multi_oriented/', '../u14m/artistic/',
-            '../u14m/contextless/', '../u14m/salient/', '../u14m/multi_words/',
-            '../u14m/general/'
-        ], ['../OST/weak/', '../OST/heavy/'],
-        ['../wordart_test/', '../test/IC13_1015/', '../test/IC15_2077/']
+            f'{data_root}/u14m/curve/', f'{data_root}/u14m/multi_oriented/',
+            f'{data_root}/u14m/artistic/', f'{data_root}/u14m/contextless/',
+            f'{data_root}/u14m/salient/', f'{data_root}/u14m/multi_words/',
+            f'{data_root}/u14m/general/'
+        ],
+        [f'{data_root}/OST/weak/', f'{data_root}/OST/heavy/'],
+        [
+            f'{data_root}/wordart_test/', f'{data_root}/test/IC13_1015/',
+            f'{data_root}/test/IC15_2077/'
+        ]
     ]
+    if groups_arg is not None:
+        selected = [int(g) for g in groups_arg.split(',')]
+        data_dirs_list = [data_dirs_list[i] for i in selected]
+
     cfg = cfg.cfg
     file_csv = open(
         cfg['Global']['output_dir'] + '/' +
