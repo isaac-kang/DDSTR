@@ -66,11 +66,12 @@ Train:
     name: RatioDataSetTVResize
     ds_width: True
     padding: False
-    data_dir_list: ['../Union14M-L-LMDB-Filtered/filter_train_challenging',
-    '../Union14M-L-LMDB-Filtered/filter_train_hard',
-    '../Union14M-L-LMDB-Filtered/filter_train_medium',
-    '../Union14M-L-LMDB-Filtered/filter_train_normal',
-    '../Union14M-L-LMDB-Filtered/filter_train_easy',
+    data_dir_list: [
+      '~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_easy',
     ]
     transforms:
       - DecodeImagePIL: # load image
@@ -103,12 +104,12 @@ Eval:
     ds_width: True
     padding: False
     data_dir_list: [
-      '../evaluation/CUTE80',
-      '../evaluation/IC13_857',
-      '../evaluation/IC15_1811',
-      '../evaluation/IIIT5k',
-      '../evaluation/SVT',
-      '../evaluation/SVTP',
+      '~/data/STR/openocr/evaluation/CUTE80',
+      '~/data/STR/openocr/evaluation/IC13_857',
+      '~/data/STR/openocr/evaluation/IC15_1811',
+      '~/data/STR/openocr/evaluation/IIIT5k',
+      '~/data/STR/openocr/evaluation/SVT',
+      '~/data/STR/openocr/evaluation/SVTP',
       ]
     transforms:
       - DecodeImagePIL: # load image
