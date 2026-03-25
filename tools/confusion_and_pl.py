@@ -405,9 +405,9 @@ def perform_pl(model, cfg, post_process, lmdb_dir, ds_name, confusion_detail,
     confusion_map = _build_confusion_map(confusion_detail, ext_to_unicode)
     ext_unicode_set = set(ext_to_unicode.values())
 
-    # Build image-only transforms
-    train_cfg = cfg.get('Train', cfg.get('Eval', {}))
-    dataset_cfg = train_cfg.get('dataset', {})
+    # Build image-only transforms: use Eval config to avoid training augmentations
+    eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
+    dataset_cfg = eval_cfg.get('dataset', {})
     transforms_cfg = dataset_cfg.get('transforms', [])
     img_transforms = []
     for t in transforms_cfg:
@@ -415,6 +415,7 @@ def perform_pl(model, cfg, post_process, lmdb_dir, ds_name, confusion_detail,
             name = list(t.keys())[0]
             if 'Encode' not in name and 'KeepKeys' not in name:
                 img_transforms.append(t)
+    img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
     ops = create_operators(img_transforms, cfg['Global'])
 
@@ -547,6 +548,8 @@ def main():
                         help='Root dir for decomposed LMDB output')
     parser.add_argument('--skip_pl', action='store_true',
                         help='Skip PL (Step 2), only build confusion matrix')
+    parser.add_argument('--skip_cd', action='store_true',
+                        help='Skip Step 1 (confusion decomposition), load existing confusion_mapping.json from output_dir')
     parser.add_argument('--model_type', default=None,
                         help='Model type name for output path (auto-detected from config if omitted)')
     args = parser.parse_args()
@@ -597,50 +600,60 @@ def main():
     print(f'Charset size: {len(charset)}')
 
     # ==================== Step 1: Confusion Matrix ====================
-    print('\n' + '=' * 60)
-    print(f'Step 1: Building confusion matrix ({", ".join(args.train_dirs)})')
-    print('=' * 60)
+    if args.skip_cd:
+        mapping_path = output_dir / 'confusion_mapping.json'
+        if not mapping_path.exists():
+            raise FileNotFoundError(f'--skip_cd requires existing {mapping_path}. Run without --skip_cd first.')
+        with open(mapping_path, 'r', encoding='utf-8') as f:
+            confusion_detail = json.load(f)
+        ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
+        print(f'\nSkipping CCD Step 1 (--skip_cd): loaded confusion mapping from {mapping_path}')
+        print(f'  {len(confusion_detail)} confused character(s) found in existing mapping')
+    else:
+        print('\n' + '=' * 60)
+        print(f'CCD Step 1: Building confusion matrix ({", ".join(args.train_dirs)})')
+        print('=' * 60)
 
-    confusion = build_confusion_matrix(
-        model, cfg, post_process, args.data_root, args.train_dirs,
-        args.device, args.batch_size, args.num_workers,
-    )
+        confusion = build_confusion_matrix(
+            model, cfg, post_process, args.data_root, args.train_dirs,
+            args.device, args.batch_size, args.num_workers,
+        )
 
-    # Save raw confusion matrix as numpy
-    chars = sorted(charset)
-    char_to_idx = {c: i for i, c in enumerate(chars)}
-    n = len(chars)
-    cm = np.zeros((n, n), dtype=np.int64)
-    for gt_ch, preds in confusion.items():
-        if gt_ch not in char_to_idx:
-            continue
-        for pred_ch, count in preds.items():
-            if pred_ch not in char_to_idx:
+        # Save raw confusion matrix as numpy
+        chars = sorted(charset)
+        char_to_idx = {c: i for i, c in enumerate(chars)}
+        n = len(chars)
+        cm = np.zeros((n, n), dtype=np.int64)
+        for gt_ch, preds in confusion.items():
+            if gt_ch not in char_to_idx:
                 continue
-            cm[char_to_idx[gt_ch], char_to_idx[pred_ch]] = count
+            for pred_ch, count in preds.items():
+                if pred_ch not in char_to_idx:
+                    continue
+                cm[char_to_idx[gt_ch], char_to_idx[pred_ch]] = count
 
-    np.save(output_dir / 'confusion_matrix.npy', cm)
+        np.save(output_dir / 'confusion_matrix.npy', cm)
 
-    # Save confusion matrix as CSV
-    csv_path = output_dir / 'confusion_matrix.csv'
-    with open(csv_path, 'w') as f:
-        f.write('gt\\pred,' + ','.join(chars) + '\n')
-        for i, ch in enumerate(chars):
-            f.write(ch + ',' + ','.join(str(cm[i, j]) for j in range(n)) + '\n')
-    print(f'Confusion matrix saved to {csv_path}')
+        # Save confusion matrix as CSV
+        csv_path = output_dir / 'confusion_matrix.csv'
+        with open(csv_path, 'w') as f:
+            f.write('gt\\pred,' + ','.join(chars) + '\n')
+            for i, ch in enumerate(chars):
+                f.write(ch + ',' + ','.join(str(cm[i, j]) for j in range(n)) + '\n')
+        print(f'Confusion matrix saved to {csv_path}')
 
-    # Extract confusions
-    print(f'\nConfusion rate threshold: {args.min_rate*100:.1f}%')
-    mapping, extended_classes, confusion_detail = extract_confusions(confusion, charset, min_rate=args.min_rate)
+        # Extract confusions
+        print(f'\nConfusion rate threshold: {args.min_rate*100:.1f}%')
+        mapping, extended_classes, confusion_detail = extract_confusions(confusion, charset, min_rate=args.min_rate)
 
-    # Save confusion mapping
-    mapping_path = output_dir / 'confusion_mapping.json'
-    with open(mapping_path, 'w', encoding='utf-8') as f:
-        json.dump(confusion_detail, f, indent=2, ensure_ascii=False)
-    print(f'Confusion mapping saved to {mapping_path}')
+        # Save confusion mapping
+        mapping_path = output_dir / 'confusion_mapping.json'
+        with open(mapping_path, 'w', encoding='utf-8') as f:
+            json.dump(confusion_detail, f, indent=2, ensure_ascii=False)
+        print(f'Confusion mapping saved to {mapping_path}')
 
-    # Build Unicode mapping
-    ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
+        # Build Unicode mapping
+        ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
 
     # Save Unicode mapping
     unicode_mapping_path = output_dir / 'unicode_mapping.json'
@@ -704,10 +717,10 @@ def main():
 
     # ==================== Step 2: PL ====================
     if args.skip_pl:
-        print('\nSkipping Step 2 (PL dataset generation).')
+        print('\nSkipping CCD Step 2 (PL dataset generation).')
     else:
         print('\n' + '=' * 60)
-        print('Step 2: Pseudo-Labeling with confusion decomposition')
+        print('CCD Step 2: Pseudo-Labeling with confusion decomposition')
         print('=' * 60)
 
         data_root = Path(args.data_root)
