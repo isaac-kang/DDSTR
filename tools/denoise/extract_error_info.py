@@ -622,19 +622,19 @@ def main():
         output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build transforms (image loading + resize only, no label encoding)
-    transform_ops = []
-    train_cfg = cfg.get('Train', cfg.get('Eval', {}))
-    dataset_cfg = train_cfg.get('dataset', {})
+    # Build transforms: eval-mode image loading + resize + normalize (no augmentation)
+    # Use Eval transforms to avoid training augmentations (e.g. PARSeqAugPIL)
+    eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
+    dataset_cfg = eval_cfg.get('dataset', {})
     transforms_cfg = dataset_cfg.get('transforms', [])
-    # Extract only image transforms (not label encoding or KeepKeys)
     img_transforms = []
     for t in transforms_cfg:
         if isinstance(t, dict):
             name = list(t.keys())[0]
             if 'Encode' not in name and 'KeepKeys' not in name:
                 img_transforms.append(t)
-    # Add KeepKeys for image only
+    # RecTVResize: PIL Image -> resize to (32, 128) -> ToTensor -> Normalize(0.5, 0.5)
+    img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
     ops = create_operators(img_transforms, cfg['Global'])
 

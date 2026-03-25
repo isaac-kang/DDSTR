@@ -254,9 +254,9 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
     """
     confusion = defaultdict(lambda: defaultdict(int))
 
-    # Build image-only transforms from config
-    train_cfg = cfg.get('Train', cfg.get('Eval', {}))
-    dataset_cfg = train_cfg.get('dataset', {})
+    # Build image-only transforms: use Eval config to avoid training augmentations
+    eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
+    dataset_cfg = eval_cfg.get('dataset', {})
     transforms_cfg = dataset_cfg.get('transforms', [])
     img_transforms = []
     for t in transforms_cfg:
@@ -264,6 +264,8 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
             name = list(t.keys())[0]
             if 'Encode' not in name and 'KeepKeys' not in name:
                 img_transforms.append(t)
+    # RecTVResize: PIL Image -> resize to (32, 128) -> ToTensor -> Normalize(0.5, 0.5)
+    img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
     ops = create_operators(img_transforms, cfg['Global'])
 

@@ -38,7 +38,7 @@ source "$SCRIPT_DIR/_launch.sh"
 
 LLM_ENV="${LLM_ENV:-vllm}"
 LLM_MODEL_IDX="${LLM_MODEL_IDX:-4}"  # Qwen3-8B
-ALPHA="${ALPHA:-0.5}"
+ALPHA="${ALPHA:-0.50}"
 DATA_ROOT="$(eval echo "${DATA_ROOT:-~/data/STR/openocr}")"
 DDSTR_DATA_ROOT="$(eval echo "${DDSTR_DATA_ROOT:-~/data/STR/ddstr}")"
 CHECKPOINT="${CHECKPOINT:?ERROR: CHECKPOINT is required}"
@@ -50,8 +50,9 @@ LLM_NAMES=( "Qwen3-0.6B" "Qwen3-1.7B" "Qwen3-4B" "Qwen3-4B-Instruct-2507" "Qwen3
 LLM_NAME="${LLM_NAMES[$LLM_MODEL_IDX]:-llm${LLM_MODEL_IDX}}"
 
 ERROR_DIR="${DDSTR_DATA_ROOT}/error_info/${MODEL_ID}"
-CLD_OUTPUT="${DDSTR_DATA_ROOT}/CLD/${MODEL_ID}__${LLM_NAME}_a${ALPHA}"
-CLD_CCD_OUTPUT="${DDSTR_DATA_ROOT}/CLD_CCD/${MODEL_ID}__${LLM_NAME}_a${ALPHA}"
+ALPHA_FMT=$(printf "%.2f" "${ALPHA}")
+CLD_OUTPUT="${DDSTR_DATA_ROOT}/CLD/${MODEL_ID}__${LLM_NAME}_a${ALPHA_FMT}"
+CLD_CCD_OUTPUT="${DDSTR_DATA_ROOT}/CLD_CCD/${MODEL_ID}__${LLM_NAME}_a${ALPHA_FMT}"
 
 mkdir -p "${ERROR_DIR}"
 
@@ -71,26 +72,30 @@ fi
 
 if run_step 2; then
     echo ""
-    echo "=== Step 2: LLM judge (${LLM_NAME}) ==="
+    echo "=== Step 2: LLM judge (${LLM_NAME}) — writing all alpha variants ==="
     _T0=$SECONDS
     # vllm env used separately due to numpy compatibility constraints
+    # Outputs judge_results_a{0.00,0.25,0.50,0.75,1.00}.tsv to ERROR_DIR
     conda run --no-capture-output -n "${LLM_ENV}" \
         python tools/denoise/llm_judge.py \
         "${ERROR_DIR}/error_info.tsv" "${LLM_MODEL_IDX}" \
-        --alpha "${ALPHA}" \
-        --output "${ERROR_DIR}/judge_results.tsv"
+        --output_dir "${ERROR_DIR}"
     elapsed 2
 fi
 
 if run_step 3; then
     echo ""
-    echo "=== Step 3: Generate denoised LMDB (CLD) ==="
+    echo "=== Step 3: Generate denoised LMDB for all alpha variants ==="
     _T0=$SECONDS
-    python tools/denoise/generate_pl.py \
-        --error_info "${ERROR_DIR}/error_info.tsv" \
-        --judge "${ERROR_DIR}/judge_results.tsv" \
-        --data_root "${DATA_ROOT}" \
-        --output_root "${CLD_OUTPUT}"
+    for _alpha in "0.00" "0.25" "0.50" "0.75" "1.00"; do
+        _CLD_OUT="${DDSTR_DATA_ROOT}/CLD/${MODEL_ID}__${LLM_NAME}_a${_alpha}"
+        echo "  alpha=${_alpha} -> ${_CLD_OUT}"
+        python tools/denoise/generate_pl.py \
+            --error_info "${ERROR_DIR}/error_info.tsv" \
+            --judge "${ERROR_DIR}/judge_results_a${_alpha}.tsv" \
+            --data_root "${DATA_ROOT}" \
+            --output_root "${_CLD_OUT}"
+    done
     elapsed 3
 fi
 

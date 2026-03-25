@@ -144,14 +144,16 @@ def find_best_alpha(entries, all_r_llm, pl_labels=None):
     return best_alpha
 
 
+ALPHAS = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('error_info', help='error_info.tsv from extract_error_info.py')
     parser.add_argument('model_idx', type=int, help='Model index')
     parser.add_argument('--batch_size', type=int, default=0, help='0 = all at once')
-    parser.add_argument('--output', default=None, help='Output TSV (default: auto-named)')
-    parser.add_argument('--alpha', type=float, default=None,
-                        help='Fixed alpha for fusion (default: auto-sweep if --pl_labels given, else 0.5)')
+    parser.add_argument('--output_dir', default=None,
+                        help='Directory to write judge_results_a{alpha}.tsv files (default: same dir as error_info)')
     parser.add_argument('--pl_labels', default=None,
                         help='Optional TSV with ground truth PL labels for alpha tuning')
     args = parser.parse_args()
@@ -203,26 +205,30 @@ def main():
             for row in reader:
                 pl_labels[(row['dataset'], int(row['sample_idx']))] = row['pl']
 
-    # Determine alpha
-    if args.alpha is not None:
-        alpha = args.alpha
-    else:
-        alpha = find_best_alpha(entries, all_r_llm, pl_labels)
+    if pl_labels:
+        find_best_alpha(entries, all_r_llm, pl_labels)
 
-    # Write output
-    output_path = args.output or f"{Path(args.error_info).stem}_{model_short}.tsv"
-    with open(output_path, 'w', newline='') as f:
-        writer = csv.writer(f, delimiter='\t')
-        writer.writerow(['dataset', 'sample_idx', 'pred', 'gt', 'r_str', 'r_llm', 'r_final', 'answer'])
-        for i, entry in enumerate(entries):
-            r_str = entry['pred_mean_lp'] - entry['gt_mean_lp']
-            r_final = alpha * r_str + (1 - alpha) * all_r_llm[i]
-            answer = "1" if r_final >= 0 else "2"
-            writer.writerow([
-                entry['dataset'], entry['sample_idx'], entry['pred'], entry['gt'],
-                f"{r_str:.4f}", f"{all_r_llm[i]:.4f}", f"{r_final:.4f}", answer,
-            ])
-    print(f"Saved to {output_path} (alpha={alpha:.1f})")
+    # Precompute r_str for all entries
+    r_strs = [e['pred_mean_lp'] - e['gt_mean_lp'] for e in entries]
+
+    # Write one judge file per alpha
+    output_dir = Path(args.output_dir) if args.output_dir else Path(args.error_info).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for alpha in ALPHAS:
+        alpha_str = f"{alpha:.2f}"
+        output_path = output_dir / f"judge_results_a{alpha_str}.tsv"
+        with open(output_path, 'w', newline='') as f:
+            writer = csv.writer(f, delimiter='\t')
+            writer.writerow(['dataset', 'sample_idx', 'pred', 'gt', 'r_str', 'r_llm', 'r_final', 'answer'])
+            for i, entry in enumerate(entries):
+                r_final = alpha * r_strs[i] + (1 - alpha) * all_r_llm[i]
+                answer = "1" if r_final >= 0 else "2"
+                writer.writerow([
+                    entry['dataset'], entry['sample_idx'], entry['pred'], entry['gt'],
+                    f"{r_strs[i]:.4f}", f"{all_r_llm[i]:.4f}", f"{r_final:.4f}", answer,
+                ])
+        print(f"Saved {output_path}")
 
 
 if __name__ == "__main__":
