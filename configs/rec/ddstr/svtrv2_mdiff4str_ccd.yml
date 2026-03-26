@@ -27,7 +27,7 @@ Global:
   use_space_char: &use_space_char False
   save_res_path: ./output/rec/ddstr/predicts_svtrv2_mdiff4str_ccd.txt
   use_amp: True
-  grad_clip_val: 20.0
+  grad_clip_val: 1.0
   fresh_params:
     - 'decoder.embedding'
     - 'decoder.tgt_word_prj'
@@ -36,7 +36,7 @@ Global:
 
 Optimizer:
   name: AdamW
-  lr: 0.0001
+  lr: 0.00003
   weight_decay: 0.05
   filter_bias_and_bn: True
 
