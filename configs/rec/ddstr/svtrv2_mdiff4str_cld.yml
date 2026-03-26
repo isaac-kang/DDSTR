@@ -136,7 +136,7 @@ Eval:
       '~/data/STR/openocr/evaluation/CUTE80',
       '~/data/STR/openocr/evaluation/IC13_857',
       '~/data/STR/openocr/evaluation/IC15_1811',
-      '~/data/STR/openocr/evaluation/IIIT5k_3000',
+      '~/data/STR/openocr/evaluation/IIIT5k',
       '~/data/STR/openocr/evaluation/SVT',
       '~/data/STR/openocr/evaluation/SVTP',
       ]
