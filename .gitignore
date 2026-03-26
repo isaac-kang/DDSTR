@@ -44,6 +44,7 @@ gradio_outputs/
 openocr_test_images/
 openocr_output/
 test_output/
+wandb/
 
 # Data symlinks (server-specific, use ~/data/STR/openocr/ convention instead)
 Union14M-L-LMDB-Filtered
