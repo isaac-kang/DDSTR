@@ -110,18 +110,17 @@ UNICODE_VARIANTS = {
 class InferenceLMDBDataset(Dataset):
     """Loads images+labels from an LMDB, applies transforms, tracks raw LMDB indices."""
 
-    def __init__(self, lmdb_dir, ops, post_process, max_text_length):
+    def __init__(self, lmdb_dir, ops):
         self.lmdb_dir = str(lmdb_dir)
         self.ops = ops
-        self.max_text_length = max_text_length
 
         env = lmdb_lib.open(self.lmdb_dir, readonly=True, lock=False)
         with env.begin() as txn:
             self.num_samples = int(txn.get(b'num-samples').decode())
         env.close()
 
-        # Build filtered index list
-        self.filtered_indices = []  # 1-based LMDB indices
+        # Read all labels (no filtering — alignment handles everything)
+        self.indices = []  # 1-based LMDB indices
         self.labels = []
         env = lmdb_lib.open(self.lmdb_dir, readonly=True, lock=False)
         with env.begin() as txn:
@@ -131,29 +130,27 @@ class InferenceLMDBDataset(Dataset):
                 if label is None:
                     continue
                 label = label.decode('utf-8').strip()
-                if len(label) > max_text_length or len(label) == 0:
+                if len(label) == 0:
                     continue
-                # Check all chars are in the charset
-                valid = True
-                for ch in label:
-                    if ch not in post_process.dict:
-                        valid = False
-                        break
-                if valid:
-                    self.filtered_indices.append(idx)
-                    self.labels.append(label)
+                self.indices.append(idx)
+                self.labels.append(label)
         env.close()
 
     def __len__(self):
-        return len(self.filtered_indices)
+        return len(self.indices)
+
+    def _get_env(self):
+        if not hasattr(self, '_env') or self._env is None:
+            self._env = lmdb_lib.open(self.lmdb_dir, readonly=True, lock=False,
+                                      readahead=False, meminit=False)
+        return self._env
 
     def __getitem__(self, i):
-        lmdb_idx = self.filtered_indices[i]
-        env = lmdb_lib.open(self.lmdb_dir, readonly=True, lock=False)
-        with env.begin() as txn:
+        lmdb_idx = self.indices[i]
+        with self._get_env().begin(buffers=True) as txn:
             img_key = f'image-{lmdb_idx:09d}'.encode()
             imgbuf = txn.get(img_key)
-        env.close()
+            imgbuf = bytes(imgbuf)
 
         label = self.labels[i]
         data = {'image': imgbuf, 'label': label}
@@ -251,8 +248,13 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
                            batch_size=512, num_workers=4):
     """Run inference on train datasets and build character-level confusion matrix.
     Uses Needleman-Wunsch alignment to handle length mismatches.
+
+    Returns:
+        confusion: defaultdict of confusion counts
+        pred_cache: dict mapping (lmdb_dir, lmdb_idx) -> pred_text for reuse in PL
     """
     confusion = defaultdict(lambda: defaultdict(int))
+    pred_cache = {}  # (str(lmdb_dir), lmdb_idx) -> pred_text
 
     # Build image-only transforms: use Eval config to avoid training augmentations
     eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
@@ -269,7 +271,11 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
     ops = create_operators(img_transforms, cfg['Global'])
 
-    max_text_length = cfg['Global'].get('max_text_length', 25)
+    # Get charset for filtering confusion entries at alignment level
+    charset_set = set()
+    for ch in post_process.dict.keys():
+        if ch not in ('blank', 'sos', 'eos') and len(ch) == 1:
+            charset_set.add(ch)
 
     for train_dir in train_dirs:
         train_root = Path(data_root) / train_dir
@@ -284,7 +290,7 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
 
         for lmdb_dir in lmdb_dirs:
             ds_name = str(lmdb_dir.relative_to(Path(data_root)))
-            dataset = InferenceLMDBDataset(lmdb_dir, ops, post_process, max_text_length)
+            dataset = InferenceLMDBDataset(lmdb_dir, ops)
             if len(dataset) == 0:
                 print(f'  Skipping {ds_name}: no valid samples')
                 continue
@@ -294,10 +300,11 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
                 collate_fn=collate_fn, pin_memory=True)
             print(f'Processing {ds_name} ({len(dataset)} samples)...')
 
+            lmdb_dir_key = str(lmdb_dir)
             for batch in tqdm(dataloader, desc=ds_name):
                 if batch is None:
                     continue
-                imgs, labels, _ = batch
+                imgs, labels, lmdb_indices = batch
                 imgs = imgs.to(device)
                 logits = model(imgs)
 
@@ -310,20 +317,28 @@ def build_confusion_matrix(model, cfg, post_process, data_root, train_dirs, devi
                     pred_results = post_process(probs_np)
                 preds_text = [r[0] for r in pred_results]
 
-                for pred, gt in zip(preds_text, labels):
+                for pred, gt, lmdb_idx in zip(preds_text, labels, lmdb_indices):
+                    # Cache prediction for PL reuse
+                    pred_cache[(lmdb_dir_key, lmdb_idx)] = pred
+
                     aligned = needleman_wunsch_align(gt, pred)
                     for gt_ch, pred_ch in aligned:
                         if gt_ch is not None and pred_ch is not None:
+                            # Only count if both chars are in charset
+                            if gt_ch not in charset_set or pred_ch not in charset_set:
+                                continue
                             if gt_ch.lower() == pred_ch.lower():
                                 confusion[gt_ch][gt_ch] += 1
                             else:
                                 confusion[gt_ch][pred_ch] += 1
 
-    return confusion
+    return confusion, pred_cache
 
 
-def extract_confusions(confusion, charset, min_rate=0.001):
-    """For each character in charset, find confused characters with rate >= min_rate."""
+def extract_confusions(confusion, charset, min_rate=0.001, max_k=3):
+    """For each character in charset, find confused characters with rate >= min_rate.
+    At most max_k confused chars per base char (top-k by count).
+    """
     mapping = {}
     extended_classes = {}
     confusion_detail = {}
@@ -342,6 +357,7 @@ def extract_confusions(confusion, charset, min_rate=0.001):
 
         sorted_confused = sorted(confused.items(), key=lambda x: (-x[1], x[0]))
         filtered = [(c, cnt) for c, cnt in sorted_confused if cnt / total >= min_rate]
+        filtered = filtered[:max_k]
 
         if not filtered:
             continue
@@ -397,63 +413,98 @@ def _apply_pl(gt, pred, confusion_map):
 
 
 def perform_pl(model, cfg, post_process, lmdb_dir, ds_name, confusion_detail,
-               ext_to_unicode, device, lmdb_output_path, batch_size=128, num_workers=4):
+               ext_to_unicode, device, lmdb_output_path, pred_cache=None,
+               batch_size=128, num_workers=4):
     """Perform pseudo-labeling on a dataset and write LMDB with PL labels.
 
+    If pred_cache is provided, skips inference and uses cached predictions.
     Returns dict with stats: total_samples, seq_changed, total_chars, chars_extended.
     """
     confusion_map = _build_confusion_map(confusion_detail, ext_to_unicode)
     ext_unicode_set = set(ext_to_unicode.values())
 
-    # Build image-only transforms: use Eval config to avoid training augmentations
-    eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
-    dataset_cfg = eval_cfg.get('dataset', {})
-    transforms_cfg = dataset_cfg.get('transforms', [])
-    img_transforms = []
-    for t in transforms_cfg:
-        if isinstance(t, dict):
-            name = list(t.keys())[0]
-            if 'Encode' not in name and 'KeepKeys' not in name:
-                img_transforms.append(t)
-    img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
-    img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
-    ops = create_operators(img_transforms, cfg['Global'])
+    lmdb_dir_key = str(lmdb_dir)
 
-    max_text_length = cfg['Global'].get('max_text_length', 25)
+    # Check if we can use cached predictions
+    if pred_cache is not None:
+        # Read labels directly from LMDB, match with cached preds
+        env = lmdb_lib.open(lmdb_dir_key, readonly=True, lock=False)
+        with env.begin() as txn:
+            num_samples = int(txn.get(b'num-samples').decode())
+        env.close()
 
-    dataset = InferenceLMDBDataset(lmdb_dir, ops, post_process, max_text_length)
-    if len(dataset) == 0:
-        print(f'  Skipping {ds_name}: no valid samples')
-        return []
+        results = []
+        env = lmdb_lib.open(lmdb_dir_key, readonly=True, lock=False)
+        with env.begin() as txn:
+            for idx in range(1, num_samples + 1):
+                cache_key = (lmdb_dir_key, idx)
+                if cache_key not in pred_cache:
+                    continue
+                label = txn.get(f'label-{idx:09d}'.encode())
+                if label is None:
+                    continue
+                label = label.decode('utf-8').strip()
+                if len(label) == 0:
+                    continue
+                pred = pred_cache[cache_key]
+                pl_unicode = _apply_pl(label, pred, confusion_map)
+                results.append({
+                    'gt': label,
+                    'pred': pred,
+                    'pl': pl_unicode,
+                    'lmdb_idx': idx,
+                })
+        env.close()
+        print(f'  {ds_name}: used cached predictions ({len(results)} samples)')
+    else:
+        # No cache — run inference
+        # Build image-only transforms: use Eval config to avoid training augmentations
+        eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
+        dataset_cfg = eval_cfg.get('dataset', {})
+        transforms_cfg = dataset_cfg.get('transforms', [])
+        img_transforms = []
+        for t in transforms_cfg:
+            if isinstance(t, dict):
+                name = list(t.keys())[0]
+                if 'Encode' not in name and 'KeepKeys' not in name:
+                    img_transforms.append(t)
+        img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
+        img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
+        ops = create_operators(img_transforms, cfg['Global'])
 
-    dataloader = DataLoader(
-        dataset, batch_size=batch_size, num_workers=num_workers,
-        collate_fn=collate_fn, pin_memory=True)
+        dataset = InferenceLMDBDataset(lmdb_dir, ops)
+        if len(dataset) == 0:
+            print(f'  Skipping {ds_name}: no valid samples')
+            return {'total_samples': 0, 'seq_changed': 0, 'total_chars': 0, 'chars_extended': 0}
 
-    results = []
-    for batch in tqdm(dataloader, desc=f'{ds_name} PL'):
-        if batch is None:
-            continue
-        imgs, labels, lmdb_indices = batch
-        imgs = imgs.to(device)
-        logits = model(imgs)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, num_workers=num_workers,
+            collate_fn=collate_fn, pin_memory=True)
 
-        if isinstance(logits, (list, tuple)):
-            pred_results = post_process(logits)
-        else:
-            probs = logits.softmax(-1)
-            probs_np = probs.detach().cpu().numpy()
-            pred_results = post_process(probs_np)
-        preds_text = [r[0] for r in pred_results]
+        results = []
+        for batch in tqdm(dataloader, desc=f'{ds_name} PL'):
+            if batch is None:
+                continue
+            imgs, labels, lmdb_indices = batch
+            imgs = imgs.to(device)
+            logits = model(imgs)
 
-        for pred, gt, lmdb_idx in zip(preds_text, labels, lmdb_indices):
-            pl_unicode = _apply_pl(gt, pred, confusion_map)
-            results.append({
-                'gt': gt,
-                'pred': pred,
-                'pl': pl_unicode,
-                'lmdb_idx': lmdb_idx,  # 1-based
-            })
+            if isinstance(logits, (list, tuple)):
+                pred_results = post_process(logits)
+            else:
+                probs = logits.softmax(-1)
+                probs_np = probs.detach().cpu().numpy()
+                pred_results = post_process(probs_np)
+            preds_text = [r[0] for r in pred_results]
+
+            for pred, gt, lmdb_idx in zip(preds_text, labels, lmdb_indices):
+                pl_unicode = _apply_pl(gt, pred, confusion_map)
+                results.append({
+                    'gt': gt,
+                    'pred': pred,
+                    'pl': pl_unicode,
+                    'lmdb_idx': lmdb_idx,
+                })
 
     # Stats
     n_changed = sum(1 for r in results if r['gt'] != r['pred'])
@@ -469,10 +520,13 @@ def perform_pl(model, cfg, post_process, lmdb_dir, ds_name, confusion_detail,
     else:
         print(f'  Total: {len(results)}, wrong pred: {n_changed}, PL applied: {n_pl_applied}')
 
-    # Write LMDB with PL labels
+    # Write LMDB with PL labels (copy ALL samples, apply PL only to filtered ones)
     if lmdb_output_path:
         lmdb_output_path = Path(lmdb_output_path)
         lmdb_output_path.mkdir(parents=True, exist_ok=True)
+
+        # Build lmdb_idx -> pl_label lookup from results
+        pl_lookup = {r['lmdb_idx']: r['pl'] for r in results}
 
         src_env = lmdb_lib.open(str(lmdb_dir), readonly=True, lock=False)
         src_mdb = Path(lmdb_dir) / 'data.mdb'
@@ -480,16 +534,27 @@ def perform_pl(model, cfg, post_process, lmdb_dir, ds_name, confusion_detail,
         dst_env = lmdb_lib.open(str(lmdb_output_path), map_size=map_size)
 
         with src_env.begin() as src_txn, dst_env.begin(write=True) as dst_txn:
-            dst_txn.put('num-samples'.encode(), str(len(results)).encode())
-            for out_idx, r in enumerate(results, start=1):
-                src_img_key = f'image-{r["lmdb_idx"]:09d}'.encode()
+            num_samples = int(src_txn.get(b'num-samples').decode())
+            dst_txn.put(b'num-samples', str(num_samples).encode())
+            for idx in range(1, num_samples + 1):
+                src_img_key = f'image-{idx:09d}'.encode()
+                src_label_key = f'label-{idx:09d}'.encode()
                 img_data = src_txn.get(src_img_key)
-                dst_txn.put(f'image-{out_idx:09d}'.encode(), img_data)
-                dst_txn.put(f'label-{out_idx:09d}'.encode(), r['pl'].encode())
+                if img_data is not None:
+                    dst_txn.put(f'image-{idx:09d}'.encode(), img_data)
+                # Use PL label if available, otherwise keep original
+                if idx in pl_lookup:
+                    dst_txn.put(f'label-{idx:09d}'.encode(), pl_lookup[idx].encode())
+                else:
+                    label_data = src_txn.get(src_label_key)
+                    if label_data is not None:
+                        dst_txn.put(f'label-{idx:09d}'.encode(), label_data)
 
         dst_env.close()
         src_env.close()
-        print(f'  PL LMDB saved to {lmdb_output_path}')
+        n_kept_original = num_samples - len(pl_lookup)
+        print(f'  PL LMDB saved to {lmdb_output_path} '
+              f'({num_samples} total, {len(pl_lookup)} PL applied, {n_kept_original} kept original)')
 
     return {
         'total_samples': len(results),
@@ -535,6 +600,8 @@ def main():
                         help='Output dir for confusion matrix/mapping (default: ~/data/STR/ddstr/CCD/{model_type}/)')
     parser.add_argument('--min_rate', type=float, default=0.001,
                         help='Minimum confusion rate threshold (default: 0.001 = 0.1%%)')
+    parser.add_argument('--max_k', type=int, default=3,
+                        help='Max confused chars per base char (top-k by count, default: 3)')
     parser.add_argument('--train_dirs', nargs='+',
                         default=['Union14M-L-LMDB-Filtered/filter_train_challenging',
                                  'Union14M-L-LMDB-Filtered/filter_train_hard',
@@ -548,8 +615,6 @@ def main():
                         help='Root dir for decomposed LMDB output')
     parser.add_argument('--skip_pl', action='store_true',
                         help='Skip PL (Step 2), only build confusion matrix')
-    parser.add_argument('--skip_cd', action='store_true',
-                        help='Skip Step 1 (confusion decomposition), load existing confusion_mapping.json from output_dir')
     parser.add_argument('--model_type', default=None,
                         help='Model type name for output path (auto-detected from config if omitted)')
     args = parser.parse_args()
@@ -600,60 +665,50 @@ def main():
     print(f'Charset size: {len(charset)}')
 
     # ==================== Step 1: Confusion Matrix ====================
-    if args.skip_cd:
-        mapping_path = output_dir / 'confusion_mapping.json'
-        if not mapping_path.exists():
-            raise FileNotFoundError(f'--skip_cd requires existing {mapping_path}. Run without --skip_cd first.')
-        with open(mapping_path, 'r', encoding='utf-8') as f:
-            confusion_detail = json.load(f)
-        ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
-        print(f'\nSkipping CCD Step 1 (--skip_cd): loaded confusion mapping from {mapping_path}')
-        print(f'  {len(confusion_detail)} confused character(s) found in existing mapping')
-    else:
-        print('\n' + '=' * 60)
-        print(f'CCD Step 1: Building confusion matrix ({", ".join(args.train_dirs)})')
-        print('=' * 60)
+    print('\n' + '=' * 60)
+    print(f'CCD Step 1: Building confusion matrix ({", ".join(args.train_dirs)})')
+    print('=' * 60)
 
-        confusion = build_confusion_matrix(
-            model, cfg, post_process, args.data_root, args.train_dirs,
-            args.device, args.batch_size, args.num_workers,
-        )
+    confusion, pred_cache = build_confusion_matrix(
+        model, cfg, post_process, args.data_root, args.train_dirs,
+        args.device, args.batch_size, args.num_workers,
+    )
 
-        # Save raw confusion matrix as numpy
-        chars = sorted(charset)
-        char_to_idx = {c: i for i, c in enumerate(chars)}
-        n = len(chars)
-        cm = np.zeros((n, n), dtype=np.int64)
-        for gt_ch, preds in confusion.items():
-            if gt_ch not in char_to_idx:
+    # Save raw confusion matrix as numpy
+    chars = sorted(charset)
+    char_to_idx = {c: i for i, c in enumerate(chars)}
+    n = len(chars)
+    cm = np.zeros((n, n), dtype=np.int64)
+    for gt_ch, preds in confusion.items():
+        if gt_ch not in char_to_idx:
+            continue
+        for pred_ch, count in preds.items():
+            if pred_ch not in char_to_idx:
                 continue
-            for pred_ch, count in preds.items():
-                if pred_ch not in char_to_idx:
-                    continue
-                cm[char_to_idx[gt_ch], char_to_idx[pred_ch]] = count
+            cm[char_to_idx[gt_ch], char_to_idx[pred_ch]] = count
 
-        np.save(output_dir / 'confusion_matrix.npy', cm)
+    np.save(output_dir / 'confusion_matrix.npy', cm)
 
-        # Save confusion matrix as CSV
-        csv_path = output_dir / 'confusion_matrix.csv'
-        with open(csv_path, 'w') as f:
-            f.write('gt\\pred,' + ','.join(chars) + '\n')
-            for i, ch in enumerate(chars):
-                f.write(ch + ',' + ','.join(str(cm[i, j]) for j in range(n)) + '\n')
-        print(f'Confusion matrix saved to {csv_path}')
+    # Save confusion matrix as CSV
+    csv_path = output_dir / 'confusion_matrix.csv'
+    with open(csv_path, 'w') as f:
+        f.write('gt\\pred,' + ','.join(chars) + '\n')
+        for i, ch in enumerate(chars):
+            f.write(ch + ',' + ','.join(str(cm[i, j]) for j in range(n)) + '\n')
+    print(f'Confusion matrix saved to {csv_path}')
 
-        # Extract confusions
-        print(f'\nConfusion rate threshold: {args.min_rate*100:.1f}%')
-        mapping, extended_classes, confusion_detail = extract_confusions(confusion, charset, min_rate=args.min_rate)
+    # Extract confusions
+    print(f'\nConfusion rate threshold: {args.min_rate*100:.1f}%')
+    mapping, extended_classes, confusion_detail = extract_confusions(confusion, charset, min_rate=args.min_rate, max_k=args.max_k)
 
-        # Save confusion mapping
-        mapping_path = output_dir / 'confusion_mapping.json'
-        with open(mapping_path, 'w', encoding='utf-8') as f:
-            json.dump(confusion_detail, f, indent=2, ensure_ascii=False)
-        print(f'Confusion mapping saved to {mapping_path}')
+    # Save confusion mapping
+    mapping_path = output_dir / 'confusion_mapping.json'
+    with open(mapping_path, 'w', encoding='utf-8') as f:
+        json.dump(confusion_detail, f, indent=2, ensure_ascii=False)
+    print(f'Confusion mapping saved to {mapping_path}')
 
-        # Build Unicode mapping
-        ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
+    # Build Unicode mapping
+    ext_to_unicode, unicode_to_ext = build_unicode_mapping(confusion_detail)
 
     # Save Unicode mapping
     unicode_mapping_path = output_dir / 'unicode_mapping.json'
@@ -750,7 +805,8 @@ def main():
                 print(f'\n  Dataset: {rel}')
                 ds_stats = perform_pl(model, cfg, post_process, lmdb_dir, rel,
                                       confusion_detail, ext_to_unicode, args.device,
-                                      lmdb_out, args.batch_size, args.num_workers)
+                                      lmdb_out, pred_cache=pred_cache,
+                                      batch_size=args.batch_size, num_workers=args.num_workers)
                 agg_samples += ds_stats['total_samples']
                 agg_seq_changed += ds_stats['seq_changed']
                 agg_chars += ds_stats['total_chars']

@@ -1,0 +1,301 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            94kufauq66e3n9002ofsasm0dmf6ohq2:
+                args:
+                    - -c
+                    - configs/rec/ddstr/svtrv2_mdiff4str_cld.yml
+                    - -o
+                    - Train.dataset.data_dir_list=['/data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_challenging', '/data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_hard', '/data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_medium', '/data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_normal', '/data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_easy']
+                codePath: tools/train_rec.py
+                codePathLocal: tools/train_rec.py
+                cpu_count: 32
+                cpu_count_logical: 64
+                cudaVersion: "12.2"
+                disk:
+                    /:
+                        total: "982858645504"
+                        used: "101439180800"
+                email: isaac3419@gmail.com
+                executable: /data/isaackang/anaconda3/envs/ddstr/bin/python
+                git:
+                    commit: 8c12f1fda78baff0e721597abd0b521ace5dbb12
+                    remote: git@github.com:isaac-kang/DDSTR.git
+                gpu: NVIDIA RTX A5000
+                gpu_count: 5
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 8192
+                      memoryTotal: "25757220864"
+                      name: NVIDIA RTX A5000
+                      uuid: GPU-1d4f698a-e9f4-2833-2eed-7bce5f61a4b5
+                    - architecture: Ampere
+                      cudaCores: 10752
+                      memoryTotal: "51527024640"
+                      name: NVIDIA RTX A6000
+                      uuid: GPU-f5283952-b8c9-0199-8a81-ce70f7c5ed3d
+                    - architecture: Ampere
+                      cudaCores: 8192
+                      memoryTotal: "25757220864"
+                      name: NVIDIA RTX A5000
+                      uuid: GPU-75463dd2-308c-0ae1-cabc-f582ebacc4bc
+                    - architecture: Ampere
+                      cudaCores: 10752
+                      memoryTotal: "51527024640"
+                      name: NVIDIA RTX A6000
+                      uuid: GPU-401bc259-c317-3682-d105-eab1b1d59da8
+                    - architecture: Ampere
+                      cudaCores: 10752
+                      memoryTotal: "51527024640"
+                      name: NVIDIA RTX A6000
+                      uuid: GPU-a33a235c-566f-49a5-04ee-108362992fe8
+                host: quokka
+                memory:
+                    total: "270132580352"
+                os: Linux-5.15.0-139-generic-x86_64-with-glibc2.31
+                program: /data/isaackang/STR/DDSTR/tools/train_rec.py
+                python: CPython 3.10.19
+                root: /data/isaackang/STR/DDSTR
+                startedAt: "2026-03-26T04:25:17.058533Z"
+                writerId: 94kufauq66e3n9002ofsasm0dmf6ohq2
+        m: []
+        python_version: 3.10.19
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+                - 41
+            "3":
+                - 13
+                - 16
+                - 61
+            "4": 3.10.19
+            "5": 0.25.1
+            "12": 0.25.1
+            "13": linux-x86_64
+Architecture:
+    value:
+        Decoder:
+            autoregressive_decoding: false
+            cloze_mask_decoding: false
+            low_confidence_decoding: false
+            max_len: 25
+            name: MDiffDecoder
+            nhead: 6
+            num_decoder_layers: 6
+            parallel_decoding: false
+            random_mask_decoding: false
+            sample_k: 3
+            sampler_step: 3
+            semi_autoregressive_decoding: true
+            temperature: 1
+        Encoder:
+            depths:
+                - 6
+                - 6
+                - 6
+            dims:
+                - 128
+                - 256
+                - 384
+            feat2d: false
+            last_stage: false
+            local_k:
+                - - 5
+                  - 5
+                - - 5
+                  - 5
+                - - -1
+                  - -1
+            mixer:
+                - - Conv
+                  - Conv
+                  - Conv
+                  - Conv
+                  - Conv
+                  - Conv
+                - - Conv
+                  - Conv
+                  - FGlobal
+                  - Global
+                  - Global
+                  - Global
+                - - Global
+                  - Global
+                  - Global
+                  - Global
+                  - Global
+                  - Global
+            name: SVTRv2LNConvTwo33
+            num_heads:
+                - 4
+                - 8
+                - 12
+            sub_k:
+                - - 1
+                  - 1
+                - - 2
+                  - 1
+                - - -1
+                  - -1
+            use_pos_embed: false
+        Transform: null
+        algorithm: MDiff4STR
+        in_channels: 3
+        model_type: rec
+Eval:
+    value:
+        dataset:
+            data_dir_list:
+                - ~/data/STR/openocr/evaluation/CUTE80
+                - ~/data/STR/openocr/evaluation/IC13_857
+                - ~/data/STR/openocr/evaluation/IC15_1811
+                - ~/data/STR/openocr/evaluation/IIIT5k
+                - ~/data/STR/openocr/evaluation/SVT
+                - ~/data/STR/openocr/evaluation/SVTP
+            ds_width: true
+            name: RatioDataSetTVResize
+            padding: false
+            transforms:
+                - DecodeImagePIL:
+                    img_mode: RGB
+                - ARLabelEncode:
+                    character_dict_path: ./tools/utils/EN_symbol_dict.txt
+                    max_text_length: 25
+                    use_space_char: false
+                - KeepKeys:
+                    keep_keys:
+                        - image
+                        - label
+                        - length
+        loader:
+            batch_size_per_card: 256
+            drop_last: false
+            max_ratio: 4
+            num_workers: 4
+            shuffle: false
+        sampler:
+            divided_factor:
+                - 4
+                - 16
+            first_bs: 256
+            fix_bs: false
+            is_training: false
+            name: RatioSampler
+            scales:
+                - - 128
+                  - 32
+Global:
+    value:
+        cal_metric_during_train: false
+        character_dict_path: ./tools/utils/EN_symbol_dict.txt
+        checkpoints: null
+        device: gpu
+        distributed: false
+        epoch_num: 10
+        eval_batch_step:
+            - 0
+            - 500
+        eval_epoch_step:
+            - 0
+            - 1
+        fresh_params:
+            - decoder.embedding
+            - decoder.tgt_word_prj
+        grad_clip_val: 20
+        infer_img: null
+        log_smooth_window: 20
+        max_text_length: 25
+        output_dir: ./output/rec/ddstr/svtrv2_mdiff4str_cld/
+        pretrained_model: ./pretrained/mdiff4str_base/best.pth
+        print_batch_step: 10
+        save_epoch_step:
+            - 0
+            - 1
+        save_res_path: ./output/rec/ddstr/predicts_svtrv2_mdiff4str_cld.txt
+        use_amp: true
+        use_space_char: false
+        use_tensorboard: false
+        use_wandb: true
+LRScheduler:
+    value:
+        cycle_momentum: false
+        name: OneCycleLR
+        warmup_epoch: 1.5
+Loss:
+    value:
+        name: MDiffLoss
+Metric:
+    value:
+        is_filter: true
+        main_indicator: acc
+        name: RecMetric
+Optimizer:
+    value:
+        filter_bias_and_bn: true
+        lr: 0.0001
+        name: AdamW
+        weight_decay: 0.05
+PostProcess:
+    value:
+        character_dict_path: ./tools/utils/EN_symbol_dict.txt
+        name: ARLabelDecode
+        use_space_char: false
+Train:
+    value:
+        dataset:
+            data_dir_list:
+                - /data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_challenging
+                - /data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_hard
+                - /data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_medium
+                - /data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_normal
+                - /data/isaackang/data/STR/ddstr/CLD/mdiff4str_B__Qwen3-8B_a0.50/Union14M-L-LMDB-Filtered/filter_train_easy
+            ds_width: true
+            name: RatioDataSetTVResize
+            padding: false
+            transforms:
+                - DecodeImagePIL:
+                    img_mode: RGB
+                - PARSeqAugPIL: null
+                - MDiffLabelEncode:
+                    character_dict_path: ./tools/utils/EN_symbol_dict.txt
+                    max_text_length: 25
+                    sample_num: 3
+                    train_all_layer: true
+                    use_space_char: false
+                - KeepKeys:
+                    keep_keys:
+                        - image
+                        - label
+                        - reflect_ids
+                        - noisy_batch
+                        - masked_indices
+                        - p_mask
+                        - length
+        loader:
+            batch_size_per_card: 256
+            drop_last: true
+            max_ratio: 4
+            num_workers: 4
+            shuffle: true
+        sampler:
+            divided_factor:
+                - 4
+                - 16
+            first_bs: 256
+            fix_bs: false
+            is_training: true
+            name: RatioSampler
+            scales:
+                - - 128
+                  - 32
+config:
+    value: configs/rec/ddstr/svtrv2_mdiff4str_cld.yml
+eval:
+    value: true
+filename:
+    value: svtrv2_mdiff4str_cld
+local_rank:
+    value: null

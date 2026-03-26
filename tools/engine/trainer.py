@@ -61,16 +61,20 @@ class Trainer(object):
         os.makedirs(self.cfg['Global']['output_dir'], exist_ok=True)
 
         self.writer = None
-        if is_main_process(
-        ) and self.cfg['Global']['use_tensorboard'] and 'train' in mode:
-            import wandb
-            from torch.utils.tensorboard import SummaryWriter
-            wandb.init(project='demo-sync-tb',
-                       name=self.cfg['Global'].get('run_name',
-                                                   'log_wandb_openocr'),
-                       sync_tensorboard=True)
-
-            self.writer = SummaryWriter(self.cfg['Global']['output_dir'])
+        self.wandb_run = None
+        if is_main_process() and 'train' in mode:
+            if self.cfg['Global'].get('use_wandb', False):
+                import wandb
+                run_name = self.cfg['Global'].get('run_name',
+                    os.path.basename(self.cfg['Global']['output_dir'].rstrip('/')))
+                self.wandb_run = wandb.init(
+                    project=self.cfg['Global'].get('wandb_project', 'DDSTR'),
+                    name=run_name,
+                    config=self.cfg,
+                )
+            if self.cfg['Global']['use_tensorboard']:
+                from torch.utils.tensorboard import SummaryWriter
+                self.writer = SummaryWriter(self.cfg['Global']['output_dir'])
 
         self.logger = get_logger(
             'openrec' if task == 'rec' else 'opendet',
@@ -474,6 +478,12 @@ class Trainer(object):
                     for k, v in train_stats.get().items():
                         self.writer.add_scalar(f'TRAIN/{k}', v, global_step)
 
+                if self.wandb_run is not None:
+                    self.wandb_run.log(
+                        {f'train/{k}': v for k, v in train_stats.get().items()},
+                        step=global_step,
+                    )
+
                 if is_main_process() and (
                     (global_step > 0 and global_step % print_batch_step == 0)
                         or (idx >= len(self.train_dataloader) - 1)):
@@ -547,11 +557,14 @@ class Trainer(object):
         self.logger.info(best_str)
         if self.writer is not None:
             self.writer.close()
+        if self.wandb_run is not None:
+            self.wandb_run.finish()
         if torch.cuda.device_count() > 1:
             torch.distributed.barrier()
 
     def eval_step(self, global_step, epoch):
         cur_metric = self.eval()
+        wandb_samples = cur_metric.pop('_wandb_samples', [])
         cur_metric_str = f"cur metric, {', '.join(['{}: {}'.format(k, v) for k, v in cur_metric.items()])}"
         self.logger.info(cur_metric_str)
 
@@ -561,6 +574,37 @@ class Trainer(object):
                 if isinstance(v, (float, int)):
                     self.writer.add_scalar(f'EVAL/{k}', cur_metric[k],
                                            global_step)
+
+        # wandb logging
+        if self.wandb_run is not None:
+            import wandb
+            wandb_log = {
+                'val_acc': cur_metric.get('acc', 0),
+                'val_ned': cur_metric.get('norm_edit_dis', 0),
+                'epoch': epoch,
+            }
+            # sample table
+            if wandb_samples:
+                columns = ['image', 'raw_pred', 'pred', 'gt']
+                table = wandb.Table(columns=columns)
+                for s in wandb_samples:
+                    if s is None:
+                        continue
+                    img_tensor = s['image']  # C, H, W
+                    # denormalize: Normalize(0.5, 0.5) -> pixel = val * 0.5 + 0.5
+                    mean = torch.tensor([0.5, 0.5, 0.5]).view(3, 1, 1)
+                    std = torch.tensor([0.5, 0.5, 0.5]).view(3, 1, 1)
+                    img_tensor = img_tensor * std + mean
+                    img_tensor = img_tensor.clamp(0, 1)
+                    img_np = (img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                    table.add_data(
+                        wandb.Image(img_np),
+                        s['raw_pred'],
+                        s['pred'],
+                        s['gt'],
+                    )
+                wandb_log['val_samples'] = table
+            self.wandb_run.log(wandb_log, step=global_step)
 
         if (cur_metric[self.eval_class.main_indicator] >=
                 self.best_metric[self.eval_class.main_indicator]):
@@ -588,6 +632,11 @@ class Trainer(object):
 
     def eval(self):
         self.model.eval()
+        # Reservoir sampling: collect 4 random samples for wandb table
+        wandb_samples = []
+        wandb_sample_k = 4
+        sample_counter = 0
+
         with torch.no_grad():
             total_frame = 0.0
             total_time = 0.0
@@ -615,11 +664,35 @@ class Trainer(object):
                 # Evaluate the results of the current batch
                 post_result = self.post_process_class(preds, batch_numpy)
                 # CCD mode: map extended Unicode chars back to base chars
+                raw_preds_list = None
                 if self.pl_charset_adapter is not None and isinstance(post_result, tuple):
                     preds_list, labels_list = post_result
+                    raw_preds_list = preds_list  # before adapter
                     preds_list = [(self.pl_charset_adapter(text), conf) for text, conf in preds_list]
                     post_result = (preds_list, labels_list)
                 self.eval_class(post_result, batch_numpy)
+
+                # Reservoir sampling for wandb table
+                if self.wandb_run is not None and isinstance(post_result, tuple):
+                    cur_preds, cur_labels = post_result
+                    images = batch_tensor[0].cpu()
+                    for i in range(len(cur_preds)):
+                        sample_counter += 1
+                        # Decide whether to include this sample
+                        if len(wandb_samples) < wandb_sample_k:
+                            slot = len(wandb_samples)
+                            wandb_samples.append(None)
+                        else:
+                            slot = random.randint(0, sample_counter - 1)
+                            if slot >= wandb_sample_k:
+                                continue
+                        raw_pred = raw_preds_list[i][0] if raw_preds_list else cur_preds[i][0]
+                        wandb_samples[slot] = {
+                            'image': images[i],
+                            'raw_pred': raw_pred,
+                            'pred': cur_preds[i][0],
+                            'gt': cur_labels[i],
+                        }
 
                 pbar.update(1)
                 total_frame += len(batch[0])
@@ -630,6 +703,7 @@ class Trainer(object):
         pbar.close()
         self.model.train()
         metric['fps'] = total_frame / total_time
+        metric['_wandb_samples'] = wandb_samples
         return metric
 
     def test_dataloader(self):

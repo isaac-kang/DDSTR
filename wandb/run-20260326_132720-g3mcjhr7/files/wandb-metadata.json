@@ -1,0 +1,72 @@
+{
+  "os": "Linux-5.15.0-139-generic-x86_64-with-glibc2.31",
+  "python": "CPython 3.10.19",
+  "startedAt": "2026-03-26T04:27:20.746760Z",
+  "args": [
+    "-c",
+    "configs/rec/mdiff4str/svtrv2_mdiffdecoder_finetune.yml"
+  ],
+  "program": "/data/isaackang/STR/DDSTR/tools/train_rec.py",
+  "codePath": "tools/train_rec.py",
+  "codePathLocal": "tools/train_rec.py",
+  "git": {
+    "remote": "git@github.com:isaac-kang/DDSTR.git",
+    "commit": "8c12f1fda78baff0e721597abd0b521ace5dbb12"
+  },
+  "email": "isaac3419@gmail.com",
+  "root": "/data/isaackang/STR/DDSTR",
+  "host": "quokka",
+  "executable": "/data/isaackang/anaconda3/envs/ddstr/bin/python",
+  "cpu_count": 32,
+  "cpu_count_logical": 64,
+  "gpu": "NVIDIA RTX A5000",
+  "gpu_count": 5,
+  "disk": {
+    "/": {
+      "total": "982858645504",
+      "used": "101441802240"
+    }
+  },
+  "memory": {
+    "total": "270132580352"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA RTX A5000",
+      "memoryTotal": "25757220864",
+      "cudaCores": 8192,
+      "architecture": "Ampere",
+      "uuid": "GPU-1d4f698a-e9f4-2833-2eed-7bce5f61a4b5"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-f5283952-b8c9-0199-8a81-ce70f7c5ed3d"
+    },
+    {
+      "name": "NVIDIA RTX A5000",
+      "memoryTotal": "25757220864",
+      "cudaCores": 8192,
+      "architecture": "Ampere",
+      "uuid": "GPU-75463dd2-308c-0ae1-cabc-f582ebacc4bc"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-401bc259-c317-3682-d105-eab1b1d59da8"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-a33a235c-566f-49a5-04ee-108362992fe8"
+    }
+  ],
+  "cudaVersion": "12.2",
+  "writerId": "41dvccmpzyp74wt3u6upvpkbyxhtca27"
+}
