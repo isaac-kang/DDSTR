@@ -268,12 +268,19 @@ def main():
     parser.add_argument('--llm_model', default='Qwen/Qwen3-8B')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--alpha', type=float, default=0.5)
+    parser.add_argument('--str_cache', default=None,
+                        help='STR scores cache file (default: tools/analysis/str_scores_cache_{model}.json)')
+    parser.add_argument('--no_str_cache', action='store_true',
+                        help='Ignore existing cache and recompute STR scores')
     parser.add_argument('--llm_cache', default='tools/analysis/llm_scores_cache.json',
                         help='LLM scores cache file (auto-saved on first run)')
     parser.add_argument('--no_llm_cache', action='store_true',
                         help='Ignore existing cache and recompute LLM scores')
     parser.add_argument('--output', default='output/analysis/score_distribution.png')
     args = parser.parse_args()
+    if args.str_cache is None:
+        str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
+        args.str_cache = f'tools/analysis/str_scores_cache_{str_model_name}.json'
     args.eval_root = str(Path(args.eval_root).expanduser().resolve())
     os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
 
@@ -286,11 +293,38 @@ def main():
         if n > 0:
             print(f'  {cat}: {n}')
 
-    # Compute scores
-    r_str_list, pred_lp_list, gt_lp_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device)
+    # STR scores: cache to avoid re-running
+    import json
+    str_cache_path = args.str_cache
+    use_str_cache = not args.no_str_cache and os.path.exists(str_cache_path)
+    if use_str_cache:
+        with open(str_cache_path, 'r') as f:
+            str_cache = json.load(f)
+        cached_model = str_cache.get('str_model', 'unknown')
+        str_lookup = {(r['dataset_name'], r['image_index']): r for r in str_cache['scores']}
+        r_str_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('r_str', 0.0) for e in entries]
+        pred_lp_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('pred_lp', 0.0) for e in entries]
+        gt_lp_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('gt_lp', 0.0) for e in entries]
+        print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
+    else:
+        r_str_list, pred_lp_list, gt_lp_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device)
+        # Derive model name from checkpoint path (e.g. "pretrained/mdiff4str_base/best.pth" -> "mdiff4str_base")
+        str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
+        str_cache = {
+            'str_model': str_model_name,
+            'config': args.config,
+            'checkpoint': args.checkpoint,
+            'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
+                        'pred': e['pred'], 'gt': e['gt'],
+                        'r_str': r_str_list[i], 'pred_lp': pred_lp_list[i], 'gt_lp': gt_lp_list[i]}
+                       for i, e in enumerate(entries)],
+        }
+        os.makedirs(os.path.dirname(str_cache_path) or '.', exist_ok=True)
+        with open(str_cache_path, 'w') as f:
+            json.dump(str_cache, f, indent=2)
+        print(f'STR scores cached to {str_cache_path} (model: {str_model_name})')
 
     # LLM scores: cache to avoid re-running
-    import json
     llm_cache_path = args.llm_cache
     use_cache = not args.no_llm_cache and os.path.exists(llm_cache_path)
     if use_cache:
