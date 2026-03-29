@@ -1,5 +1,5 @@
 #!/bin/bash
-# Baseline: Standard training (no CLD/CCD)
+# Baseline: Standard training (no SLD/CCD)
 #
 # Usage: MODEL=svtrv2 bash scripts/run_baseline.sh [extra train_rec.py args]
 #

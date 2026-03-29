@@ -1,20 +1,20 @@
-# DDSTR CLD mode: SVTRv2 + MDiff4STR trained on CLD-denoised data
-# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_mdiff4str_cld.yml
+# DDSTR SLD mode: SVTRv2 + MDiff4STR trained on SLD-denoised data
+# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_mdiff4str_sld.yml
 #
-# CLD replaces noisy GT labels with denoised PL labels.
+# SLD replaces noisy GT labels with denoised PL labels.
 # Only data_dir_list changes — model and charset remain the same as baseline.
 #
-# To generate CLD data:
+# To generate SLD data:
 #   1. python tools/denoise/extract_error_info.py -c configs/rec/mdiff4str/svtrv2_mdiffdecoder_base.yml --checkpoint <ckpt>
 #   2. python tools/denoise/llm_judge.py --error_info ~/data/STR/ddstr/error_info/mdiff4str/error_info.tsv
-#   3. python tools/denoise/generate_pl.py --error_info ... --judge ... --data_root ~/data/STR/openocr --output_root ~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5
+#   3. python tools/denoise/generate_pl.py --error_info ... --judge ... --data_root ~/data/STR/openocr --output_root ~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5
 
 Global:
   device: gpu
   epoch_num: 10
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/ddstr/svtrv2_mdiff4str_cld/
+  output_dir: ./output/rec/ddstr/svtrv2_mdiff4str_sld/
   save_epoch_step: [0, 1]
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
@@ -27,7 +27,7 @@ Global:
   character_dict_path: &character_dict_path ./tools/utils/EN_symbol_dict.txt
   max_text_length: &max_text_length 25
   use_space_char: &use_space_char False
-  save_res_path: ./output/rec/ddstr/predicts_svtrv2_mdiff4str_cld.txt
+  save_res_path: ./output/rec/ddstr/predicts_svtrv2_mdiff4str_sld.txt
   use_amp: True
   grad_clip_val: 20.0
   fresh_params:
@@ -94,13 +94,13 @@ Train:
     name: RatioDataSetTVResize
     ds_width: True
     padding: false
-    # CLD: point to denoised LMDB (same structure as original, labels replaced)
+    # SLD: point to denoised LMDB (same structure as original, labels replaced)
     data_dir_list: [
-      '~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
-      '~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
-      '~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
-      '~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
-      '~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
+      '~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
     ]
     transforms:
       - DecodeImagePIL:

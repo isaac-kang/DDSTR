@@ -1,47 +1,37 @@
-# DDSTR CLD+CCD mode: SVTRv2 + MDiff4STR trained on CLD-denoised then CCD-decomposed data
-# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_mdiff4str_cld_ccd.yml
+# DDSTR SLD mode: SVTRv2 + PARSeq trained on SLD-denoised data
+# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_parseq_sld.yml
 #
-# Pipeline: CLD denoise -> CCD decompose -> train
-# Combines both improvements: noisy labels are first denoised, then confused chars
-# are decomposed into extended Unicode classes.
+# SLD replaces noisy GT labels with denoised PL labels.
+# Only data_dir_list changes — model and charset remain the same as baseline.
 #
-# To generate CLD_CCD data:
-#   1. Run CLD pipeline (extract_error_info -> llm_judge -> generate_pl)
-#   2. Run CCD on the denoised data:
-#      python tools/confusion_and_pl.py -c configs/rec/mdiff4str/svtrv2_mdiffdecoder_base.yml --checkpoint <ckpt> \
-#        --data_root ~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5 \
-#        --output_dir ~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5
+# To generate SLD data:
+#   1. python tools/denoise/extract_error_info.py -c configs/rec/parseq/svrtv2_parseq.yml --checkpoint <ckpt>
+#   2. python tools/denoise/llm_judge.py --error_info ~/data/STR/ddstr/error_info/parseq/error_info.tsv
+#   3. python tools/denoise/generate_pl.py --error_info ... --judge ... --data_root ~/data/STR/openocr --output_root ~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5
 
 Global:
   device: gpu
-  epoch_num: 10
+  epoch_num: 20
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/ddstr/svtrv2_mdiff4str_cld_ccd/
-  save_epoch_step: [0, 1]
-  eval_batch_step: [0, 500]
+  output_dir: ./output/rec/ddstr/svtrv2_parseq_sld/
+  save_epoch_step: [15, 1]
   eval_epoch_step: [0, 1]
-  cal_metric_during_train: False
-  pretrained_model: ./pretrained/mdiff4str_base/best.pth
+  eval_batch_step: [0, 500]
+  cal_metric_during_train: True
+  pretrained_model:
   checkpoints:
   use_tensorboard: false
-  use_wandb: true
   infer_img:
   character_dict_path: &character_dict_path ./tools/utils/EN_symbol_dict.txt
   max_text_length: &max_text_length 25
   use_space_char: &use_space_char False
-  save_res_path: ./output/rec/ddstr/predicts_svtrv2_mdiff4str_cld_ccd.txt
+  save_res_path: ./output/rec/ddstr/predicts_svtrv2_parseq_sld.txt
   use_amp: True
-  grad_clip_val: 20.0
-  fresh_params:
-    - 'decoder.embedding'
-    - 'decoder.tgt_word_prj'
-  # CCD mode: unicode_mapping triggers extended charset + PLCharsetAdapter
-  unicode_mapping: ~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/unicode_mapping.json
 
 Optimizer:
   name: AdamW
-  lr: 0.0001
+  lr: 0.00065
   weight_decay: 0.05
   filter_bias_and_bn: True
 
@@ -52,8 +42,7 @@ LRScheduler:
 
 Architecture:
   model_type: rec
-  algorithm: MDiff4STR
-  in_channels: 3
+  algorithm: PARSeq
   Transform:
   Encoder:
     name: SVTRv2LNConvTwo33
@@ -65,24 +54,14 @@ Architecture:
     local_k: [[5, 5], [5, 5], [-1, -1]]
     sub_k: [[1, 1], [2, 1], [-1, -1]]
     last_stage: false
-    feat2d: False
   Decoder:
-    name: MDiffDecoder
-    num_decoder_layers: 6
-    nhead: 6
-    max_len: *max_text_length
-    parallel_decoding: False
-    autoregressive_decoding: False
-    low_confidence_decoding: False
-    random_mask_decoding: False
-    semi_autoregressive_decoding: True
-    cloze_mask_decoding: False
-    sampler_step: 3
-    sample_k: &sample_k 3
-    temperature: 1.0
+    name: PARSeqDecoder
+    decode_ar: True
+    refine_iters: 1
+    only_attn: False
 
 Loss:
-  name: MDiffLoss
+  name: PARSeqLoss
 
 PostProcess:
   name: ARLabelDecode
@@ -99,26 +78,24 @@ Train:
     name: RatioDataSetTVResize
     ds_width: True
     padding: false
-    # CLD_CCD: denoised then decomposed LMDB
+    # SLD: point to denoised LMDB (same structure as original, labels replaced)
     data_dir_list: [
-      '~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
-      '~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
-      '~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
-      '~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
-      '~/data/STR/ddstr/CLD_CCD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
+      '~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/ddstr/SLD/parseq__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
     ]
     transforms:
       - DecodeImagePIL:
           img_mode: RGB
       - PARSeqAugPIL:
-      - MDiffLabelEncode:
+      - ARLabelEncode:
           character_dict_path: *character_dict_path
           use_space_char: *use_space_char
           max_text_length: *max_text_length
-          sample_num: *sample_k
-          train_all_layer: True
       - KeepKeys:
-          keep_keys: ['image', 'label', 'reflect_ids', 'noisy_batch', 'masked_indices', 'p_mask', 'length']
+          keep_keys: ['image', 'label', 'length']
   sampler:
     name: RatioSampler
     scales: [[128, 32]]

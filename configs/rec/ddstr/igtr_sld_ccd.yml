@@ -1,23 +1,23 @@
-# DDSTR CLD+CCD mode: IGTR trained on CLD-denoised then CCD-decomposed data
-# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/igtr_cld_ccd.yml
+# DDSTR SLD+CCD mode: IGTR trained on SLD-denoised then CCD-decomposed data
+# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/igtr_sld_ccd.yml
 #
-# Pipeline: CLD denoise -> CCD decompose -> train
+# Pipeline: SLD denoise -> CCD decompose -> train
 # Combines both improvements: noisy labels are first denoised, then confused chars
 # are decomposed into extended Unicode classes.
 #
-# To generate CLD_CCD data:
-#   1. Run CLD pipeline (extract_error_info -> llm_judge -> generate_pl)
+# To generate SLD_CCD data:
+#   1. Run SLD pipeline (extract_error_info -> llm_judge -> generate_pl)
 #   2. Run CCD on the denoised data:
 #      python tools/confusion_and_pl.py -c configs/rec/igtr/svtr_base_ds_igtr.yml --checkpoint <ckpt> \
-#        --data_root ~/data/STR/ddstr/CLD/igtr__Qwen3-8B_a0.5 \
-#        --output_dir ~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5
+#        --data_root ~/data/STR/ddstr/SLD/igtr__Qwen3-8B_a0.5 \
+#        --output_dir ~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5
 
 Global:
   device: gpu
   epoch_num: 20
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/ddstr/igtr_cld_ccd/
+  output_dir: ./output/rec/ddstr/igtr_sld_ccd/
   save_epoch_step: [15, 1]
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
@@ -29,10 +29,10 @@ Global:
   character_dict_path: &character_dict_path ./tools/utils/EN_symbol_dict.txt
   max_text_length: &max_text_length 25
   use_space_char: &use_space_char False
-  save_res_path: ./output/rec/ddstr/predicts_igtr_cld_ccd.txt
+  save_res_path: ./output/rec/ddstr/predicts_igtr_sld_ccd.txt
   use_amp: True
   # CCD mode: unicode_mapping triggers extended charset + PLCharsetAdapter
-  unicode_mapping: ~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/unicode_mapping.json
+  unicode_mapping: ~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/unicode_mapping.json
 
 Optimizer:
   name: AdamW
@@ -91,13 +91,13 @@ Train:
     name: RatioDataSet
     ds_width: True
     padding: &padding False
-    # CLD_CCD: denoised then decomposed LMDB
+    # SLD_CCD: denoised then decomposed LMDB
     data_dir_list: [
-      '~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
-      '~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
-      '~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
-      '~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
-      '~/data/STR/ddstr/CLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
+      '~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/ddstr/SLD_CCD/igtr__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
     ]
     transforms:
       - DecodeImage:

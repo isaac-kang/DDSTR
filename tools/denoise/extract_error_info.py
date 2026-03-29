@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""CLD Step 1: Extract error information from STR model predictions on training data.
+"""SLD Step 1: Extract error information from STR model predictions on training data.
 
 Runs inference on training LMDB datasets, collects samples where pred != gt,
-and computes sequence-level scores S(pred) and S(gt) for CLD.
+and computes sequence-level scores S(pred) and S(gt) for SLD.
 
 Supports 4 model types:
   - CTC (SVTRv2):   S(seq) = -CTCLoss(logits, seq) / T
@@ -581,7 +581,7 @@ def get_scorer(model_type, post_process, device):
 
 @torch.inference_mode()
 def main():
-    parser = argparse.ArgumentParser(description='CLD Step 1: Extract error info')
+    parser = argparse.ArgumentParser(description='SLD Step 1: Extract error info')
     parser.add_argument('--config', '-c', required=True, help='Model config YAML')
     parser.add_argument('--checkpoint', default=None, help='Model checkpoint path')
     parser.add_argument('--data_root', default='~/data/STR/openocr',

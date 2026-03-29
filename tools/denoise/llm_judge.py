@@ -21,15 +21,15 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 MODELS = [
-    "Qwen/Qwen3-0.6B",               # 0
-    "Qwen/Qwen3-1.7B",               # 1
-    "Qwen/Qwen3-4B",                  # 2
-    "Qwen/Qwen3-4B-Instruct-2507",   # 3
+    "Qwen/Qwen2.5-72B-Instruct-GPTQ-Int8",               # 1
+    "Qwen/Qwen3-32B",                  # 2
+    "Qwen/Qwen2.5-72B-Instruct-GPTQ-Int4",               # 0
+    "Qwen/Qwen3-32B-GPTQ-Int8",   # 3
     "Qwen/Qwen3-8B",                  # 4
     "Qwen/Qwen3-14B",                 # 5
     "Qwen/Qwen3-30B-A3B",             # 6
-    "meta-llama/Llama-3.2-1B-Instruct",  # 7
-    "meta-llama/Llama-3.2-3B-Instruct",  # 8
+    "Qwen/Qwen3-14B-AWQ",  # 7
+    "Qwen/Qwen3-32B-AWQ",  # 8
     "meta-llama/Llama-3.1-8B-Instruct",  # 9
     "google/gemma-3-1b-it",           # 10
     "google/gemma-3-4b-it",           # 11

@@ -3,8 +3,8 @@
 #
 # Supports: --steps=4          (just step 4)
 #           --steps=123        (steps 1,2,3)
-#           --steps=CLD        (alias, expanded per script)
-#           --steps=123,CLD    (mixed)
+#           --steps=SLD        (alias, expanded per script)
+#           --steps=123,SLD    (mixed)
 #           --steps=all        (everything)
 #
 # Sets: STEPS (expanded string of step numbers), PASS_ARGS (remaining args)

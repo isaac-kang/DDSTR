@@ -1,20 +1,20 @@
-# DDSTR CLD mode: SVTRv2 RCTC trained on CLD-denoised data
-# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_rctc_cld.yml
+# DDSTR SLD mode: SVTRv2 RCTC trained on SLD-denoised data
+# Usage: cd tools && python train_rec.py -c ../configs/rec/ddstr/svtrv2_rctc_sld.yml
 #
-# CLD replaces noisy GT labels with denoised PL labels.
+# SLD replaces noisy GT labels with denoised PL labels.
 # Only data_dir_list changes — model and charset remain the same as baseline.
 #
-# To generate CLD data:
+# To generate SLD data:
 #   1. python tools/denoise/extract_error_info.py -c configs/rec/svtrv2/svtrv2_rctc.yml --checkpoint <ckpt>
 #   2. python tools/denoise/llm_judge.py --error_info ~/data/STR/ddstr/error_info/svtrv2_ctc/error_info.tsv
-#   3. python tools/denoise/generate_pl.py --error_info ... --judge ... --data_root ~/data/STR/openocr --output_root ~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5
+#   3. python tools/denoise/generate_pl.py --error_info ... --judge ... --data_root ~/data/STR/openocr --output_root ~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5
 
 Global:
   device: gpu
   epoch_num: 20
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/ddstr/svtrv2_rctc_cld/
+  output_dir: ./output/rec/ddstr/svtrv2_rctc_sld/
   save_epoch_step: [15, 1]
   eval_epoch_step: [0, 1]
   eval_batch_step: [0, 500]
@@ -26,7 +26,7 @@ Global:
   character_dict_path: &character_dict_path ./tools/utils/EN_symbol_dict.txt
   max_text_length: &max_text_length 25
   use_space_char: &use_space_char False
-  save_res_path: ./output/rec/ddstr/predicts_svtrv2_rctc_cld.txt
+  save_res_path: ./output/rec/ddstr/predicts_svtrv2_rctc_sld.txt
   use_amp: True
 
 Optimizer:
@@ -75,13 +75,13 @@ Train:
     name: RatioDataSetTVResize
     ds_width: True
     padding: False
-    # CLD: point to denoised LMDB (same structure as original, labels replaced)
+    # SLD: point to denoised LMDB (same structure as original, labels replaced)
     data_dir_list: [
-      '~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
-      '~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
-      '~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
-      '~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
-      '~/data/STR/ddstr/CLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
+      '~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging',
+      '~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_hard',
+      '~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_medium',
+      '~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_normal',
+      '~/data/STR/ddstr/SLD/svtrv2_ctc__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_easy',
     ]
     transforms:
       - DecodeImagePIL:

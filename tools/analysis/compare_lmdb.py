@@ -6,8 +6,8 @@ Usage:
 Example:
     python tools/analysis/compare_lmdb.py \
         ~/data/STR/openocr/Union14M-L-LMDB-Filtered/filter_train_challenging \
-        ~/data/STR/ddstr/CLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging \
-        --output_dir ./output/analysis/cld_vs_original
+        ~/data/STR/ddstr/SLD/mdiff4str__Qwen3-8B_a0.5/Union14M-L-LMDB-Filtered/filter_train_challenging \
+        --output_dir ./output/analysis/sld_vs_original
 """
 
 import argparse
