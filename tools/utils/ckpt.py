@@ -73,7 +73,7 @@ def load_ckpt(model, cfg, optimizer=None, lr_scheduler=None, logger=None, mode='
         pretrained_model = os.path.expanduser(pretrained_model)
         if not os.path.exists(pretrained_model):
             raise FileNotFoundError(f"pretrained_model not found: {pretrained_model}")
-        fresh_params = cfg["Global"].get("fresh_params", None) if mode == 'train' else None
+        fresh_params = cfg["Global"].get("fresh_params", None) if 'train' in mode else None
         load_pretrained_params(model, pretrained_model, logger, fresh_params=fresh_params)
         logger.info(f"finetune from checkpoint {pretrained_model}")
     else:
