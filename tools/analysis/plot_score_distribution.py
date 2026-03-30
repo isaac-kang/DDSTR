@@ -392,36 +392,27 @@ def main():
     # Overall
     print(f'{"ALL":<12} {len(entries):>4}  {pred_lp.mean():>12.3f} {pred_lp.std():>12.3f}  {gt_lp.mean():>12.3f} {gt_lp.std():>12.3f}  {r_str.mean():>12.3f}')
 
-    # Raw fusion
-    r_raw_fusion = alpha * r_str + (1 - alpha) * r_llm
-
-    # Std-normalized fusion: scale to equal variance before blending
-    std_str = r_str.std() if r_str.std() > 0 else 1.0
-    std_llm = r_llm.std() if r_llm.std() > 0 else 1.0
-    r_str_norm = r_str / std_str
-    r_llm_norm = r_llm / std_llm
-    r_norm_fusion = alpha * r_str_norm + (1 - alpha) * r_llm_norm
-    print(f'\nScore stats: std(r_str)={std_str:.3f}, std(r_llm)={std_llm:.3f}')
+    # Fusion
+    r_fusion = alpha * r_str + (1 - alpha) * r_llm
 
     conf_str = sigmoid(r_str)
     conf_llm = sigmoid(r_llm)
-    conf_raw_fusion = sigmoid(r_raw_fusion)
-    conf_norm_fusion = sigmoid(r_norm_fusion)
+    conf_fusion = sigmoid(r_fusion)
 
     # Save scores to CSV
     scores_path = args.output.replace('.png', '_scores.csv')
     with open(scores_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
         w.writerow(['dataset_name', 'image_index', 'pred', 'gt', 'PL', 'category',
-                     'pred_lp', 'gt_lp', 'r_str', 'r_llm', 'r_raw_fusion', 'r_norm_fusion',
-                     'conf_str', 'conf_llm', 'conf_raw_fusion', 'conf_norm_fusion'])
+                     'pred_lp', 'gt_lp', 'r_str', 'r_llm', 'r_fusion',
+                     'conf_str', 'conf_llm', 'conf_fusion'])
         for i, e in enumerate(entries):
             w.writerow([e['dataset_name'], e['image_index'], e['pred'], e['gt'], e['PL'],
                         e['category'], f'{pred_lp[i]:.4f}', f'{gt_lp[i]:.4f}',
                         f'{r_str[i]:.4f}', f'{r_llm[i]:.4f}',
-                        f'{r_raw_fusion[i]:.4f}', f'{r_norm_fusion[i]:.4f}',
+                        f'{r_fusion[i]:.4f}',
                         f'{conf_str[i]:.4f}', f'{conf_llm[i]:.4f}',
-                        f'{conf_raw_fusion[i]:.4f}', f'{conf_norm_fusion[i]:.4f}'])
+                        f'{conf_fusion[i]:.4f}'])
     print(f'Scores saved to {scores_path}')
 
     # Plot: 2x4 (STR, LLM, Raw Fusion, Normalized Fusion)
@@ -438,11 +429,10 @@ def main():
     score_data = [
         ('STR only', 'σ(r_STR)', conf_str),
         ('LLM only', 'σ(r_LLM)', conf_llm),
-        (f'Raw Fusion (α={alpha})', f'σ(α·r_STR + (1-α)·r_LLM)', conf_raw_fusion),
-        (f'Norm Fusion (α={alpha})', f'σ(α·r̂_STR + (1-α)·r̂_LLM)', conf_norm_fusion),
+        (f'Fusion (α={alpha})', f'σ(α·r_STR + (1-α)·r_LLM)', conf_fusion),
     ]
 
-    fig, axes = plt.subplots(2, 4, figsize=(26, 12))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
 
     for col, (title, xlabel, scores) in enumerate(score_data):
         data_by_cat = {}
@@ -458,8 +448,7 @@ def main():
         results = [
             ('STR only', conf_str),
             ('LLM only', conf_llm),
-            ('Raw Fusion', conf_raw_fusion),
-            ('Norm Fusion', conf_norm_fusion),
+            ('Fusion', conf_fusion),
         ]
         print(f'\nCase1+2 accuracy (n={n}):')
         for name, conf in results:
