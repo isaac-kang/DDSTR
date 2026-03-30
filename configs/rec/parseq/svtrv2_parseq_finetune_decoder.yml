@@ -7,7 +7,7 @@
 
 Global:
   device: gpu
-  epoch_num: 4
+  epoch_num: 5
   log_smooth_window: 20
   print_batch_step: 10
   output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder/
@@ -15,7 +15,7 @@ Global:
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
   cal_metric_during_train: False
-  pretrained_model: ./pretrained/mdiff4str_base/best.pth
+  pretrained_model: ./pretrained/svtrv2_smtr_gtc_rctc/best.pth
   checkpoints:
   use_tensorboard: false
   use_wandb: true
@@ -28,7 +28,7 @@ Global:
   grad_clip_val: 20.0
   fresh_params:
     - 'decoder.'
-  freeze_epochs: 20
+  freeze_epochs: 100
 
 Optimizer:
   name: AdamW
