@@ -30,6 +30,11 @@ def parse_args():
         action='store_true',
         default=False,
         help='Save error images to output/analysis/{dataset_name}/')
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False,
+        help='Print detailed per-dataset metrics')
     args = parser.parse_args()
     return args
 
@@ -39,6 +44,7 @@ def main():
     cfg = Config(FLAGS.config)
     groups_arg = FLAGS.groups
     save_errors = FLAGS.save_errors
+    verbose = FLAGS.verbose
     FLAGS = vars(FLAGS)
     opt = FLAGS.pop('opt')
     cfg.merge_dict(FLAGS)
@@ -66,9 +72,10 @@ def main():
     analyze_head_cosine(trainer)
 
     best_model_dict = trainer.status.get('metrics', {})
-    trainer.logger.info('metric in ckpt ***************')
-    for k, v in best_model_dict.items():
-        trainer.logger.info('{}:{}'.format(k, v))
+    if verbose:
+        trainer.logger.info('metric in ckpt ***************')
+        for k, v in best_model_dict.items():
+            trainer.logger.info('{}:{}'.format(k, v))
 
     data_root = os.path.expanduser(
         os.environ.get('EVAL_DATA_ROOT', '~/data/STR/openocr'))
@@ -120,11 +127,17 @@ def main():
                 config_each['Eval']['dataset']['data_dir_list'] = [datadir]
             else:
                 config_each['Eval']['dataset']['data_dir'] = datadir
+            if not verbose:
+                import logging
+                trainer.logger.setLevel(logging.WARNING)
             valid_dataloader = build_dataloader(config_each, 'Eval',
                                                 trainer.logger)
-            trainer.logger.info(
-                f'{datadir} valid dataloader has {len(valid_dataloader)} iters'
-            )
+            if not verbose:
+                trainer.logger.setLevel(logging.INFO)
+            if verbose:
+                trainer.logger.info(
+                    f'{datadir} valid dataloader has {len(valid_dataloader)} iters'
+                )
             trainer.valid_dataloader = valid_dataloader
             ds_name = datadir.rstrip('/').split('/')[-1]
             error_save_dir = None
@@ -147,10 +160,12 @@ def main():
             acc_each_dis.append(metric['norm_edit_dis'])
             acc_each_num.append(metric['num_samples'])
 
-            trainer.logger.info('metric eval ***************')
+            if verbose:
+                trainer.logger.info('metric eval ***************')
             csv_w.writerow([datadir])
             for k, v in metric.items():
-                trainer.logger.info('{}:{}'.format(k, v))
+                if verbose:
+                    trainer.logger.info('{}:{}'.format(k, v))
                 if 'each' in k:
                     csv_w.writerow([k] + v)
                     if 'each_len' in k:
@@ -168,6 +183,7 @@ def main():
         avg1 = np.array(acc_each) * np.array(acc_each_num) / sum(acc_each_num)
         csv_w.writerow(['acc'] + acc_each + [sum(acc_each) / len(acc_each)] +
                        [avg1.sum().tolist()])
+        print(data_name + ['avg', 'wavg'])
         print(acc_each + [sum(acc_each) / len(acc_each)] +
               [avg1.sum().tolist()])
         avg1 = np.array(acc_each_dis) * np.array(acc_each_num) / sum(

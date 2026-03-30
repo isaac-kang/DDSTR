@@ -153,7 +153,7 @@ class Trainer(object):
         self.grad_clip_val = self.cfg['Global'].get('grad_clip_val', 0)
 
         self.status = load_ckpt(self.model, self.cfg, self.optimizer,
-                                self.lr_scheduler)
+                                self.lr_scheduler, mode=mode)
 
         if self.cfg['Global']['distributed']:
             self.model = torch.nn.parallel.DistributedDataParallel(
