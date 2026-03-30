@@ -60,10 +60,13 @@ def load_ckpt(model, cfg, optimizer=None, lr_scheduler=None, logger=None, mode='
     if checkpoints and os.path.exists(checkpoints):
         checkpoint = torch.load(checkpoints, map_location=torch.device("cpu"))
         model.load_state_dict(checkpoint["state_dict"], strict=True)
-        if optimizer is not None:
+        if optimizer is not None and checkpoint.get("optimizer") is not None:
             optimizer.load_state_dict(checkpoint["optimizer"])
-        if lr_scheduler is not None:
+        resume_scheduler = cfg["Global"].get("resume_scheduler", True)
+        if lr_scheduler is not None and checkpoint.get("scheduler") is not None and resume_scheduler:
             lr_scheduler.load_state_dict(checkpoint["scheduler"])
+        elif not resume_scheduler:
+            logger.info("resume_scheduler=False: lr_scheduler will restart from scratch")
         logger.info(f"resume from checkpoint {checkpoints} (epoch {checkpoint['epoch']})")
 
         status["global_step"] = checkpoint["global_step"]
