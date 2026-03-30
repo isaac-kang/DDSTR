@@ -62,11 +62,18 @@ def load_ckpt(model, cfg, optimizer=None, lr_scheduler=None, logger=None, mode='
         model.load_state_dict(checkpoint["state_dict"], strict=True)
         if optimizer is not None and checkpoint.get("optimizer") is not None:
             optimizer.load_state_dict(checkpoint["optimizer"])
-        resume_scheduler = cfg["Global"].get("resume_scheduler", True)
+        resume_scheduler = cfg["Global"].get("resume_scheduler", False)
         if lr_scheduler is not None and checkpoint.get("scheduler") is not None and resume_scheduler:
             lr_scheduler.load_state_dict(checkpoint["scheduler"])
-        elif not resume_scheduler:
-            logger.info("resume_scheduler=False: lr_scheduler will restart from scratch")
+        elif lr_scheduler is not None:
+            # Advance fresh scheduler to checkpoint's global_step
+            # so LR follows the new schedule curve at the correct position
+            resumed_step = checkpoint["global_step"]
+            for _ in range(resumed_step):
+                lr_scheduler.step()
+            logger.info(f"checkpoint resume: lr_scheduler rebuilt with new schedule, "
+                        f"advanced to step {resumed_step}, "
+                        f"lr={lr_scheduler.get_last_lr()[0]:.6f}")
         logger.info(f"resume from checkpoint {checkpoints} (epoch {checkpoint['epoch']})")
 
         status["global_step"] = checkpoint["global_step"]

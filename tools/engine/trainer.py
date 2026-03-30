@@ -485,7 +485,10 @@ class Trainer(object):
                     if v.shape == [] else v.detach().cpu().numpy().mean()
                     for k, v in loss.items()
                 }
-                stats['lr'] = self.lr_scheduler.get_last_lr()[0]
+                try:
+                    stats['lr'] = self.lr_scheduler.get_last_lr()[0]
+                except Exception:
+                    stats['lr'] = 0.0
                 train_stats.update(stats)
 
                 if self.writer is not None:
