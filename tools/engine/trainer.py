@@ -356,7 +356,7 @@ class Trainer(object):
         last_whole_epoch_global_step = 0
         # initial validation before training
         if self.valid_dataloader is not None and is_main_process():
-            self.eval_step(global_step, start_epoch)
+            self.eval_step(global_step, start_epoch, save_best=False)
 
         for epoch in range(start_epoch, epoch_num + 1):
 
@@ -576,7 +576,7 @@ class Trainer(object):
         if torch.cuda.device_count() > 1:
             torch.distributed.barrier()
 
-    def eval_step(self, global_step, epoch):
+    def eval_step(self, global_step, epoch, save_best=True):
         cur_metric = self.eval()
         wandb_samples = cur_metric.pop('_wandb_samples', [])
         cur_metric_str = f"cur metric, {', '.join(['{}: {}'.format(k, v) for k, v in cur_metric.items()])}"
@@ -620,7 +620,7 @@ class Trainer(object):
                 wandb_log['val_samples'] = table
             self.wandb_run.log(wandb_log, step=global_step)
 
-        if (cur_metric[self.eval_class.main_indicator] >=
+        if save_best and (cur_metric[self.eval_class.main_indicator] >=
                 self.best_metric[self.eval_class.main_indicator]):
             self.best_metric.update(cur_metric)
             self.best_metric['best_epoch'] = epoch
