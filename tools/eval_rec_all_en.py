@@ -69,7 +69,8 @@ def main():
     trainer = Trainer(cfg, mode='eval')
 
     # --- Head weight cosine similarity analysis (base vs sim vs other) ---
-    analyze_head_cosine(trainer)
+    if verbose:
+        analyze_head_cosine(trainer)
 
     best_model_dict = trainer.status.get('metrics', {})
     if verbose:
@@ -128,12 +129,15 @@ def main():
             else:
                 config_each['Eval']['dataset']['data_dir'] = datadir
             if not verbose:
-                import logging
+                import logging, io, contextlib
                 trainer.logger.setLevel(logging.WARNING)
-            valid_dataloader = build_dataloader(config_each, 'Eval',
-                                                trainer.logger)
-            if not verbose:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    valid_dataloader = build_dataloader(config_each, 'Eval',
+                                                        trainer.logger)
                 trainer.logger.setLevel(logging.INFO)
+            else:
+                valid_dataloader = build_dataloader(config_each, 'Eval',
+                                                    trainer.logger)
             if verbose:
                 trainer.logger.info(
                     f'{datadir} valid dataloader has {len(valid_dataloader)} iters'
