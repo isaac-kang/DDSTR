@@ -416,8 +416,9 @@ class Trainer(object):
                 train_reader_cost += time.time() - reader_start
                 # use amp
                 if self.scaler:
+                    amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
                     with torch.amp.autocast(device_type=self.device.type,
-                                            dtype=torch.bfloat16):
+                                            dtype=amp_dtype):
                         if self.use_transformers:
                             inputs = {
                                 'pixel_values': batch_tensor[0],
