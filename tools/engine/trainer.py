@@ -354,6 +354,10 @@ class Trainer(object):
         backbone_frozen = False
 
         last_whole_epoch_global_step = 0
+        # initial validation before training
+        if self.valid_dataloader is not None and is_main_process():
+            self.eval_step(global_step, start_epoch)
+
         for epoch in range(start_epoch, epoch_num + 1):
 
             if not self.cfg['Global'].get('resume_from_iter',
@@ -711,11 +715,14 @@ class Trainer(object):
                             if slot >= wandb_sample_k:
                                 continue
                         raw_pred = raw_preds_list[i][0] if raw_preds_list else cur_preds[i][0]
+                        gt = cur_labels[i]
+                        if isinstance(gt, (tuple, list)):
+                            gt = gt[0]
                         wandb_samples[slot] = {
                             'image': images[i],
                             'raw_pred': raw_pred,
                             'pred': cur_preds[i][0],
-                            'gt': cur_labels[i],
+                            'gt': gt,
                         }
 
                 pbar.update(1)
