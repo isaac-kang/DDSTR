@@ -31,7 +31,7 @@ Global:
   fresh_params:
     - 'decoder.embedding'
     - 'decoder.tgt_word_prj'
-  freeze_epochs: 10
+  freeze_epochs: 20
 
 Optimizer:
   name: AdamW

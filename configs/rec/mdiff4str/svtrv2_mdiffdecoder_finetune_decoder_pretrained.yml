@@ -26,7 +26,7 @@ Global:
   use_amp: True
   grad_clip_val: 20.0
   fresh_params:
-  freeze_epochs: 1.5
+  freeze_epochs: 20
 
 Optimizer:
   name: AdamW
