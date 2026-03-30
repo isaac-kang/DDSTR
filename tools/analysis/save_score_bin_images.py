@@ -43,7 +43,7 @@ def load_image_from_lmdb(eval_root, dataset_name, image_index):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--csv', default='tools/analysis/PL_oracle.csv')
-    parser.add_argument('--llm_cache', default='tools/analysis/llm_scores_cache.json')
+    parser.add_argument('--llm_cache', default='tools/analysis/llm_scores_cache_Qwen-Qwen3-32B-AWQ.json')
     parser.add_argument('--eval_root', default='~/data/STR/openocr/evaluation')
     parser.add_argument('--output_dir', default='output/analysis/score_bins_llm')
     parser.add_argument('--no_name', action='store_true',

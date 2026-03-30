@@ -18,6 +18,7 @@ import lmdb as lmdb_lib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import yaml
 from PIL import Image
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
@@ -75,11 +76,14 @@ def load_image_from_lmdb(eval_root, dataset_name, image_index):
 
 # ===================== STR Scoring =====================
 
-def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device):
+def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device, opt_overrides=None):
     """Compute r_str = pred_mean_lp - gt_mean_lp for each entry using MDiff4STR."""
     from denoise.extract_error_info import detect_model_type, get_scorer
 
-    cfg = Config(config_path).cfg
+    config = Config(config_path)
+    if opt_overrides:
+        config.merge_dict(opt_overrides)
+    cfg = config.cfg
     post_process = build_post_process(cfg['PostProcess'], cfg['Global'])
     char_num = post_process.get_character_num()
     cfg['Architecture']['Decoder']['out_channels'] = char_num
@@ -265,22 +269,37 @@ def main():
                         help='STR model checkpoint')
     parser.add_argument('--eval_root', default='~/data/STR/openocr/evaluation',
                         help='Root dir for eval LMDBs')
-    parser.add_argument('--llm_model', default='Qwen/Qwen3-8B')
+    parser.add_argument('--llm_model', default='Qwen/Qwen3-32B-AWQ')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--alpha', type=float, default=0.5)
     parser.add_argument('--str_cache', default=None,
                         help='STR scores cache file (default: tools/analysis/str_scores_cache_{model}.json)')
     parser.add_argument('--no_str_cache', action='store_true',
                         help='Ignore existing cache and recompute STR scores')
-    parser.add_argument('--llm_cache', default='tools/analysis/llm_scores_cache.json',
-                        help='LLM scores cache file (auto-saved on first run)')
+    parser.add_argument('--llm_cache', default=None,
+                        help='LLM scores cache file (default: tools/analysis/llm_scores_cache_{model}.json)')
     parser.add_argument('--no_llm_cache', action='store_true',
                         help='Ignore existing cache and recompute LLM scores')
     parser.add_argument('--output', default='output/analysis/score_distribution.png')
+    parser.add_argument('-o', '--opt', nargs='*', default=[],
+                        help='Override config options, e.g. -o Architecture.Decoder.decoding_mode=greedy')
     args = parser.parse_args()
     if args.str_cache is None:
         str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
         args.str_cache = f'tools/analysis/str_scores_cache_{str_model_name}.json'
+    if args.llm_cache is None:
+        llm_model_name = args.llm_model.replace('/', '-')
+        args.llm_cache = f'tools/analysis/llm_scores_cache_{llm_model_name}.json'
+    # Parse -o overrides into dict
+    opt_overrides = {}
+    for s in args.opt:
+        s = s.strip()
+        k, v = s.split('=', 1)
+        keys = k.split('.')
+        cur = opt_overrides
+        for key in keys[:-1]:
+            cur = cur.setdefault(key, {})
+        cur[keys[-1]] = yaml.load(v, Loader=yaml.Loader)
     args.eval_root = str(Path(args.eval_root).expanduser().resolve())
     os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
 
@@ -307,7 +326,7 @@ def main():
         gt_lp_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('gt_lp', 0.0) for e in entries]
         print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
     else:
-        r_str_list, pred_lp_list, gt_lp_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device)
+        r_str_list, pred_lp_list, gt_lp_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
         # Derive model name from checkpoint path (e.g. "pretrained/mdiff4str_base/best.pth" -> "mdiff4str_base")
         str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
         str_cache = {

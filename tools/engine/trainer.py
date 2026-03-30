@@ -345,26 +345,16 @@ class Trainer(object):
                 'resume_iter'] = self.resume_iter - last_whole_epoch_global_step
 
         fresh_param_prefixes = self.cfg['Global'].get('fresh_params', [])
-        freeze_epochs = self.cfg['Global'].get('freeze_epochs', 1.5)
+        freeze_epochs = self.cfg['Global'].get('freeze_epochs', None)
+        try:
+            _step_each_epoch = len(self.train_dataloader)
+        except TypeError:
+            _step_each_epoch = self.cfg['Global'].get('total_iter_steps', 100000)
+        freeze_steps = int(freeze_epochs * _step_each_epoch) if freeze_epochs is not None else 0
+        backbone_frozen = False
 
         last_whole_epoch_global_step = 0
         for epoch in range(start_epoch, epoch_num + 1):
-            # freeze backbone during warmup, unfreeze after
-            if freeze_epochs > 0 and fresh_param_prefixes:
-                base_model = self.model.module if self.cfg['Global']['distributed'] else self.model
-                if epoch <= freeze_epochs:
-                    for name, param in base_model.named_parameters():
-                        is_fresh = any(name.startswith(p) for p in fresh_param_prefixes)
-                        param.requires_grad_(is_fresh)
-                    if is_main_process() and epoch == start_epoch:
-                        self.logger.info(
-                            f'freeze_warmup: backbone FROZEN for epochs 1-{freeze_epochs}, '
-                            f'training only {fresh_param_prefixes}')
-                elif epoch == int(freeze_epochs) + 1:
-                    for param in base_model.parameters():
-                        param.requires_grad_(True)
-                    if is_main_process():
-                        self.logger.info(f'freeze_warmup: epoch {epoch} — backbone UNFROZEN, training all params')
 
             if not self.cfg['Global'].get('resume_from_iter',
                                           False):  # for unirec resume training
@@ -396,6 +386,26 @@ class Trainer(object):
                             f'resume from iter {self.resume_iter}, start training from iter {global_step}'
                         )
                         continue
+
+                # freeze/unfreeze backbone based on global_step
+                if freeze_steps > 0 and fresh_param_prefixes:
+                    base_model = self.model.module if self.cfg['Global']['distributed'] else self.model
+                    if global_step < freeze_steps and not backbone_frozen:
+                        for name, param in base_model.named_parameters():
+                            is_fresh = any(name.startswith(p) for p in fresh_param_prefixes)
+                            param.requires_grad_(is_fresh)
+                        backbone_frozen = True
+                        if is_main_process():
+                            self.logger.info(
+                                f'freeze_warmup: backbone FROZEN for {freeze_epochs} epochs '
+                                f'({freeze_steps} steps), training only {fresh_param_prefixes}')
+                    elif global_step >= freeze_steps and backbone_frozen:
+                        for param in base_model.parameters():
+                            param.requires_grad_(True)
+                        backbone_frozen = False
+                        if is_main_process():
+                            self.logger.info(
+                                f'freeze_warmup: step {global_step} — backbone UNFROZEN, training all params')
 
                 batch_tensor = [t.to(self.device) for t in batch]
                 batch_numpy = [t.numpy() for t in batch]
@@ -630,12 +640,13 @@ class Trainer(object):
         best_str = f"best metric, {', '.join(['{}: {}'.format(k, v) for k, v in self.best_metric.items()])}"
         self.logger.info(best_str)
 
-    def eval(self):
+    def eval(self, error_save_dir=None, dataset_name=None):
         self.model.eval()
         # Reservoir sampling: collect 4 random samples for wandb table
         wandb_samples = []
         wandb_sample_k = 4
         sample_counter = 0
+        error_img_idx = 0
 
         with torch.no_grad():
             total_frame = 0.0
@@ -672,6 +683,19 @@ class Trainer(object):
                     post_result = (preds_list, labels_list)
                 self.eval_class(post_result, batch_numpy)
 
+                # Save error images
+                if error_save_dir is not None and isinstance(post_result, tuple):
+                    cur_preds, cur_labels = post_result
+                    images = batch_tensor[0].cpu()
+                    for i in range(len(cur_preds)):
+                        pred_text = cur_preds[i][0]
+                        gt_text = cur_labels[i]
+                        if pred_text != gt_text:
+                            self._save_error_image(
+                                images[i], error_save_dir, dataset_name,
+                                error_img_idx, pred_text, gt_text)
+                            error_img_idx += 1
+
                 # Reservoir sampling for wandb table
                 if self.wandb_run is not None and isinstance(post_result, tuple):
                     cur_preds, cur_labels = post_result
@@ -700,11 +724,32 @@ class Trainer(object):
             # Get final metric，eg. acc or hmean
             metric = self.eval_class.get_metric()
 
+        if error_save_dir is not None:
+            self.logger.info(
+                f'Saved {error_img_idx} error images to {error_save_dir}')
         pbar.close()
         self.model.train()
         metric['fps'] = total_frame / total_time
         metric['_wandb_samples'] = wandb_samples
         return metric
+
+    @staticmethod
+    def _save_error_image(img_tensor, save_dir, dataset_name, img_idx,
+                          pred_text, gt_text):
+        import re
+        from PIL import Image
+
+        def _sanitize(s):
+            return re.sub(r'[\\/:*?"<>|]', '_', s)
+
+        fname = f'{dataset_name}_{img_idx:04d}_pred_{_sanitize(pred_text)}_gt_{_sanitize(gt_text)}.png'
+        # tensor: (C, H, W), normalized to [0, 1] or [-1, 1]
+        img = img_tensor.clone()
+        if img.min() < 0:
+            img = (img + 1) / 2
+        img = img.clamp(0, 1)
+        img_np = (img.permute(1, 2, 0).numpy() * 255).astype('uint8')
+        Image.fromarray(img_np).save(os.path.join(save_dir, fname))
 
     def test_dataloader(self):
         starttime = time.time()
