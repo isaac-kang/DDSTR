@@ -6,10 +6,10 @@
 
 Global:
   device: gpu
-  epoch_num: 5
+  epoch_num: 10
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/u14m_filter/svtrv2_mdiffdecoder_finetune_decoder_fresh_1.5_5/
+  output_dir: ./output/rec/u14m_filter/svtrv2_mdiffdecoder_finetune_decoder_fresh_1.5_10/
   save_epoch_step: [0, 1]
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]

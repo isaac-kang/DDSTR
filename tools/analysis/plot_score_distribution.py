@@ -1,7 +1,7 @@
 """Compute STR/LLM scores for PL error samples and plot distributions.
 
-Reads error_details_PL.csv, loads images from eval LMDBs,
-runs STR model for r_str and LLM for r_llm, then plots 3 distributions.
+Reads PL_oracle.csv, loads images from eval LMDBs,
+runs STR model for conf_str and LLM for conf_llm, then plots distributions.
 
 Usage:
     CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=4 python tools/analysis/plot_score_distribution.py
@@ -30,10 +30,6 @@ from openrec.modeling import build_model
 from openrec.postprocess import build_post_process
 from openrec.preprocess import create_operators, transform
 from utils.ckpt import load_ckpt
-
-
-def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
 
 
 def load_csv(csv_path):
@@ -77,7 +73,10 @@ def load_image_from_lmdb(eval_root, dataset_name, image_index):
 # ===================== STR Scoring =====================
 
 def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device, opt_overrides=None):
-    """Compute r_str = pred_mean_lp - gt_mean_lp for each entry using MDiff4STR."""
+    """Compute conf_str = exp(mean_lp(pred)) for each entry.
+
+    Uses the final inference logits — scores pred tokens from the output distribution.
+    """
     from denoise.extract_error_info import detect_model_type, get_scorer
 
     config = Config(config_path)
@@ -109,9 +108,7 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
     ops = create_operators(img_transforms, cfg['Global'])
 
-    r_str_list = []
-    pred_lp_list = []
-    gt_lp_list = []
+    pred_score_list = []
     print(f'Computing STR scores ({len(entries)} samples)...')
     with torch.inference_mode():
         for i, entry in enumerate(entries):
@@ -119,9 +116,7 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
             data = {'image': imgbuf, 'label': entry['gt']}
             data = transform(data, ops)
             if data is None:
-                r_str_list.append(0.0)
-                pred_lp_list.append(0.0)
-                gt_lp_list.append(0.0)
+                pred_score_list.append(0.5)
                 continue
             img = data[0]
             if isinstance(img, np.ndarray):
@@ -130,18 +125,14 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
 
             preds_text, pred_scores, gt_scores = scorer.score(model, img, [entry['gt']])
             pred_lp = pred_scores[0].item()
-            gt_lp = gt_scores[0].item()
-            r_str = pred_lp - gt_lp
-            r_str_list.append(r_str)
-            pred_lp_list.append(pred_lp)
-            gt_lp_list.append(gt_lp)
+            pred_score_list.append(np.exp(pred_lp))
 
             if (i + 1) % 50 == 0:
                 print(f'  {i + 1}/{len(entries)}')
 
     del model
     torch.cuda.empty_cache()
-    return r_str_list, pred_lp_list, gt_lp_list
+    return pred_score_list
 
 
 # ===================== LLM Scoring =====================
@@ -150,11 +141,14 @@ def build_prompt(pred, gt):
     return f"Which is more likely the true text, allowing for OCR mistakes (e.g., similar-looking characters)? 1) {pred} 2) {gt} Answer only 1 or 2."
 
 
-def extract_llm_logodds(output):
-    """Extract log-odds r_LLM = lp("1") - lp("2") from vLLM output."""
+def extract_llm_score(output):
+    """Extract LLM score = exp(lp("1")) from vLLM output.
+
+    Returns probability that pred is correct (i.e. answer is "1").
+    """
     logprobs_list = output.outputs[0].logprobs
     if not logprobs_list:
-        return 0.0
+        return 0.5
 
     generated_text = output.outputs[0].text
     char_pos = None
@@ -163,7 +157,7 @@ def extract_llm_logodds(output):
             char_pos = i
             break
     if char_pos is None:
-        return 0.0
+        return 0.5
 
     token_ids = output.outputs[0].token_ids
     answer_token_idx = None
@@ -182,28 +176,23 @@ def extract_llm_logodds(output):
         cum_len += len(decoded)
 
     if answer_token_idx is None:
-        return 0.0
+        return 0.5
 
     target_logprobs = logprobs_list[answer_token_idx]
-    lp1, lp2 = None, None
+    lp1 = None
     for token_id, logprob_obj in target_logprobs.items():
         decoded = logprob_obj.decoded_token
         if "1" in decoded and lp1 is None:
             lp1 = logprob_obj.logprob
-        elif "2" in decoded and lp2 is None:
-            lp2 = logprob_obj.logprob
+            break
 
-    if lp1 is None and lp2 is None:
-        return 0.0
     if lp1 is None:
-        return -20.0
-    if lp2 is None:
-        return 20.0
-    return lp1 - lp2
+        return 0.0
+    return np.exp(lp1)
 
 
 def compute_llm_scores(entries, llm_model_name, device):
-    """Compute r_llm = lp("1") - lp("2") for each entry using vLLM."""
+    """Compute LLM score = exp(lp("1")) for each entry using vLLM."""
     from vllm import LLM, SamplingParams
 
     print(f'Loading LLM: {llm_model_name}...')
@@ -221,7 +210,7 @@ def compute_llm_scores(entries, llm_model_name, device):
     print(f'Computing LLM scores ({len(entries)} samples)...')
     outputs = llm.chat(conversations, sampling_params=sampling_params, **chat_kwargs)
 
-    r_llm_list = [extract_llm_logodds(output) for output in outputs]
+    r_llm_list = [extract_llm_score(output) for output in outputs]
 
     del llm
     torch.cuda.empty_cache()
@@ -271,7 +260,10 @@ def main():
                         help='Root dir for eval LMDBs')
     parser.add_argument('--llm_model', default='Qwen/Qwen3-32B-AWQ')
     parser.add_argument('--device', default='cuda')
-    parser.add_argument('--alpha', type=float, default=0.5)
+    parser.add_argument('--alpha', type=float, default=0.5,
+                        help='Blending weight: alpha*STR + (1-alpha)*LLM')
+    parser.add_argument('--threshold', type=float, default=0.5,
+                        help='Decision threshold: score >= threshold -> pred, else -> gt')
     parser.add_argument('--str_cache', default=None,
                         help='STR scores cache file (default: tools/analysis/str_scores_cache_{model}.json)')
     parser.add_argument('--no_str_cache', action='store_true',
@@ -280,6 +272,10 @@ def main():
                         help='LLM scores cache file (default: tools/analysis/llm_scores_cache_{model}.json)')
     parser.add_argument('--no_llm_cache', action='store_true',
                         help='Ignore existing cache and recompute LLM scores')
+    parser.add_argument('--str_only', action='store_true',
+                        help='Compute STR scores only (skip LLM)')
+    parser.add_argument('--llm_only', action='store_true',
+                        help='Compute LLM scores only (skip STR)')
     parser.add_argument('--output', default='output/analysis/score_distribution.png')
     parser.add_argument('-o', '--opt', nargs='*', default=[],
                         help='Override config options, e.g. -o Architecture.Decoder.decoding_mode=greedy')
@@ -312,110 +308,112 @@ def main():
         if n > 0:
             print(f'  {cat}: {n}')
 
-    # STR scores: cache to avoid re-running
     import json
-    str_cache_path = args.str_cache
-    use_str_cache = not args.no_str_cache and os.path.exists(str_cache_path)
-    if use_str_cache:
-        with open(str_cache_path, 'r') as f:
-            str_cache = json.load(f)
-        cached_model = str_cache.get('str_model', 'unknown')
-        str_lookup = {(r['dataset_name'], r['image_index']): r for r in str_cache['scores']}
-        r_str_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('r_str', 0.0) for e in entries]
-        pred_lp_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('pred_lp', 0.0) for e in entries]
-        gt_lp_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('gt_lp', 0.0) for e in entries]
-        print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
-    else:
-        r_str_list, pred_lp_list, gt_lp_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
-        # Derive model name from checkpoint path (e.g. "pretrained/mdiff4str_base/best.pth" -> "mdiff4str_base")
-        str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
-        str_cache = {
-            'str_model': str_model_name,
-            'config': args.config,
-            'checkpoint': args.checkpoint,
-            'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
-                        'pred': e['pred'], 'gt': e['gt'],
-                        'r_str': r_str_list[i], 'pred_lp': pred_lp_list[i], 'gt_lp': gt_lp_list[i]}
-                       for i, e in enumerate(entries)],
-        }
-        os.makedirs(os.path.dirname(str_cache_path) or '.', exist_ok=True)
-        with open(str_cache_path, 'w') as f:
-            json.dump(str_cache, f, indent=2)
-        print(f'STR scores cached to {str_cache_path} (model: {str_model_name})')
-
-    # LLM scores: cache to avoid re-running
-    llm_cache_path = args.llm_cache
-    use_cache = not args.no_llm_cache and os.path.exists(llm_cache_path)
-    if use_cache:
-        with open(llm_cache_path, 'r') as f:
-            cache = json.load(f)
-        # Support both old (list) and new ({llm_model, scores}) format
-        if isinstance(cache, list):
-            scores_list = cache
-            cached_model = 'unknown'
-        else:
-            scores_list = cache['scores']
-            cached_model = cache.get('llm_model', 'unknown')
-        cache_lookup = {(r['dataset_name'], r['image_index']): r['r_llm'] for r in scores_list}
-        r_llm_list = [cache_lookup.get((e['dataset_name'], e['image_index']), 0.0) for e in entries]
-        print(f'Loaded LLM scores from cache: {llm_cache_path} (model: {cached_model})')
-    else:
-        r_llm_list = compute_llm_scores(entries, args.llm_model, args.device)
-        # Save cache with model name
-        cache = {'llm_model': args.llm_model,
-                 'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
-                             'pred': e['pred'], 'gt': e['gt'], 'r_llm': r}
-                            for e, r in zip(entries, r_llm_list)]}
-        os.makedirs(os.path.dirname(llm_cache_path) or '.', exist_ok=True)
-        with open(llm_cache_path, 'w') as f:
-            json.dump(cache, f, indent=2)
-        print(f'LLM scores cached to {llm_cache_path} (model: {args.llm_model})')
-
     alpha = args.alpha
-    r_str = np.array(r_str_list)
-    r_llm = np.array(r_llm_list)
-    pred_lp = np.array(pred_lp_list)
-    gt_lp = np.array(gt_lp_list)
+    threshold = args.threshold
+    use_str = not args.llm_only
+    use_llm = not args.str_only
+    n_entries = len(entries)
 
-    # Category-wise STR log prob stats
-    print(f'\n--- Category-wise STR mean log prob ---')
-    print(f'{"category":<12} {"n":>4}  {"pred_lp mean":>12} {"pred_lp std":>12}  {"gt_lp mean":>12} {"gt_lp std":>12}  {"r_str mean":>12}')
-    print('-' * 88)
-    for cat in ['PL=pred', 'PL=gt', 'PL=other', 'blank']:
-        mask = np.array([e['category'] == cat for e in entries])
-        if not mask.any():
-            continue
-        pm, ps = pred_lp[mask].mean(), pred_lp[mask].std()
-        gm, gs = gt_lp[mask].mean(), gt_lp[mask].std()
-        rm = r_str[mask].mean()
-        print(f'{cat:<12} {mask.sum():>4}  {pm:>12.3f} {ps:>12.3f}  {gm:>12.3f} {gs:>12.3f}  {rm:>12.3f}')
-    # Overall
-    print(f'{"ALL":<12} {len(entries):>4}  {pred_lp.mean():>12.3f} {pred_lp.std():>12.3f}  {gt_lp.mean():>12.3f} {gt_lp.std():>12.3f}  {r_str.mean():>12.3f}')
+    # --- STR scores ---
+    if use_str:
+        str_cache_path = args.str_cache
+        use_str_cache = not args.no_str_cache and os.path.exists(str_cache_path)
+        if use_str_cache:
+            with open(str_cache_path, 'r') as f:
+                str_cache = json.load(f)
+            cached_model = str_cache.get('str_model', 'unknown')
+            str_lookup = {(r['dataset_name'], r['image_index']): r for r in str_cache['scores']}
+            pred_score_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('pred_score', 0.5) for e in entries]
+            print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
+        else:
+            pred_score_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
+            str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
+            str_cache = {
+                'str_model': str_model_name,
+                'config': args.config,
+                'checkpoint': args.checkpoint,
+                'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
+                            'pred': e['pred'], 'gt': e['gt'],
+                            'pred_score': pred_score_list[i]}
+                           for i, e in enumerate(entries)],
+            }
+            os.makedirs(os.path.dirname(str_cache_path) or '.', exist_ok=True)
+            with open(str_cache_path, 'w') as f:
+                json.dump(str_cache, f, indent=2)
+            print(f'STR scores cached to {str_cache_path} (model: {str_model_name})')
 
-    # Fusion
-    r_fusion = alpha * r_str + (1 - alpha) * r_llm
+        conf_str = np.array(pred_score_list)
 
-    conf_str = sigmoid(r_str)
-    conf_llm = sigmoid(r_llm)
-    conf_fusion = sigmoid(r_fusion)
+    # --- LLM scores ---
+    if use_llm:
+        llm_cache_path = args.llm_cache
+        use_cache = not args.no_llm_cache and os.path.exists(llm_cache_path)
+        if use_cache:
+            with open(llm_cache_path, 'r') as f:
+                cache = json.load(f)
+            if isinstance(cache, list):
+                scores_list = cache
+                cached_model = 'unknown'
+            else:
+                scores_list = cache['scores']
+                cached_model = cache.get('llm_model', 'unknown')
+            cache_lookup = {(r['dataset_name'], r['image_index']): r.get('llm_score', r.get('r_llm', 0.5)) for r in scores_list}
+            llm_score_list = [cache_lookup.get((e['dataset_name'], e['image_index']), 0.5) for e in entries]
+            print(f'Loaded LLM scores from cache: {llm_cache_path} (model: {cached_model})')
+        else:
+            llm_score_list = compute_llm_scores(entries, args.llm_model, args.device)
+            cache = {'llm_model': args.llm_model,
+                     'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
+                                 'pred': e['pred'], 'gt': e['gt'], 'llm_score': s}
+                                for e, s in zip(entries, llm_score_list)]}
+            os.makedirs(os.path.dirname(llm_cache_path) or '.', exist_ok=True)
+            with open(llm_cache_path, 'w') as f:
+                json.dump(cache, f, indent=2)
+            print(f'LLM scores cached to {llm_cache_path} (model: {args.llm_model})')
 
-    # Save scores to CSV
+        conf_llm = np.array(llm_score_list)
+
+    # --- Fusion ---
+    if use_str and use_llm:
+        conf_fusion = alpha * conf_str + (1 - alpha) * conf_llm
+
+    # --- Category-wise stats ---
+    if use_str:
+        print(f'\n--- Category-wise STR score: exp(mean_lp(pred)) ---')
+        print(f'{"category":<12} {"n":>4}  {"conf_str":>12}')
+        print('-' * 32)
+        for cat in ['PL=pred', 'PL=gt', 'PL=other', 'blank']:
+            mask = np.array([e['category'] == cat for e in entries])
+            if not mask.any():
+                continue
+            print(f'{cat:<12} {mask.sum():>4}  {conf_str[mask].mean():>12.4f}')
+        print(f'{"ALL":<12} {n_entries:>4}  {conf_str.mean():>12.4f}')
+
+    # --- Save scores to CSV ---
     scores_path = args.output.replace('.png', '_scores.csv')
     with open(scores_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
-        w.writerow(['dataset_name', 'image_index', 'pred', 'gt', 'PL', 'category',
-                     'pred_lp', 'gt_lp', 'r_str', 'r_llm', 'r_fusion',
-                     'conf_str', 'conf_llm', 'conf_fusion'])
+        header = ['dataset_name', 'image_index', 'pred', 'gt', 'PL', 'category']
+        if use_str:
+            header += ['conf_str']
+        if use_llm:
+            header += ['conf_llm']
+        if use_str and use_llm:
+            header += ['conf_fusion']
+        w.writerow(header)
         for i, e in enumerate(entries):
-            w.writerow([e['dataset_name'], e['image_index'], e['pred'], e['gt'], e['PL'],
-                        e['category'], f'{pred_lp[i]:.4f}', f'{gt_lp[i]:.4f}',
-                        f'{r_str[i]:.4f}', f'{r_llm[i]:.4f}',
-                        f'{r_fusion[i]:.4f}',
-                        f'{conf_str[i]:.4f}', f'{conf_llm[i]:.4f}',
-                        f'{conf_fusion[i]:.4f}'])
+            row = [e['dataset_name'], e['image_index'], e['pred'], e['gt'], e['PL'], e['category']]
+            if use_str:
+                row += [f'{conf_str[i]:.4f}']
+            if use_llm:
+                row += [f'{conf_llm[i]:.4f}']
+            if use_str and use_llm:
+                row += [f'{conf_fusion[i]:.4f}']
+            w.writerow(row)
     print(f'Scores saved to {scores_path}')
 
-    # Plot: 2x4 (STR, LLM, Raw Fusion, Normalized Fusion)
+    # --- Plot ---
     colors = {
         'PL=pred': '#e74c3c',
         'PL=gt': '#2ecc71',
@@ -426,13 +424,18 @@ def main():
     cats_present = [c for c in labels_order if any(e['category'] == c for e in entries)]
     bins = np.linspace(0.0, 1.0, 41)
 
-    score_data = [
-        ('STR only', 'σ(r_STR)', conf_str),
-        ('LLM only', 'σ(r_LLM)', conf_llm),
-        (f'Fusion (α={alpha})', f'σ(α·r_STR + (1-α)·r_LLM)', conf_fusion),
-    ]
+    score_data = []
+    if use_str:
+        score_data.append(('STR only', 'exp(mean_lp(pred))', conf_str))
+    if use_llm:
+        score_data.append(('LLM only', 'exp(lp("1"))', conf_llm))
+    if use_str and use_llm:
+        score_data.append((f'Fusion (α={alpha})', f'α·STR + (1-α)·LLM', conf_fusion))
 
-    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    n_cols = len(score_data)
+    fig, axes = plt.subplots(2, max(n_cols, 1), figsize=(7 * max(n_cols, 1), 12))
+    if n_cols == 1:
+        axes = axes.reshape(2, 1)
 
     for col, (title, xlabel, scores) in enumerate(score_data):
         data_by_cat = {}
@@ -441,20 +444,22 @@ def main():
         plot_hist(axes[0, col], data_by_cat, cats_present, colors, bins, xlabel, title)
         plot_strip(axes[1, col], data_by_cat, cats_present, colors, bins, xlabel, title)
 
-    # Print accuracy
+    # --- Accuracy ---
     case12_idx = [i for i, e in enumerate(entries) if e['category'] in ('PL=pred', 'PL=gt')]
     if case12_idx:
         n = len(case12_idx)
-        results = [
-            ('STR only', conf_str),
-            ('LLM only', conf_llm),
-            ('Fusion', conf_fusion),
-        ]
-        print(f'\nCase1+2 accuracy (n={n}):')
+        results = []
+        if use_str:
+            results.append(('STR only', conf_str))
+        if use_llm:
+            results.append(('LLM only', conf_llm))
+        if use_str and use_llm:
+            results.append(('Fusion', conf_fusion))
+        print(f'\nCase1+2 accuracy (n={n}, threshold={threshold}):')
         for name, conf in results:
             correct = sum(1 for i in case12_idx
-                          if (entries[i]['category'] == 'PL=pred' and conf[i] >= 0.5) or
-                             (entries[i]['category'] == 'PL=gt' and conf[i] < 0.5))
+                          if (entries[i]['category'] == 'PL=pred' and conf[i] >= threshold) or
+                             (entries[i]['category'] == 'PL=gt' and conf[i] < threshold))
             print(f'  {name:<14}: {correct}/{n} ({correct/n*100:.2f}%)')
 
     plt.tight_layout()

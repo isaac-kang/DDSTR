@@ -67,10 +67,14 @@ class Trainer(object):
                 import wandb
                 run_name = self.cfg['Global'].get('run_name',
                     os.path.basename(self.cfg['Global']['output_dir'].rstrip('/')))
+                wandb_config = dict(self.cfg)
+                wandb_config['warmup_epoch'] = self.cfg.get('LRScheduler', {}).get('warmup_epoch')
+                wandb_config['epoch_num'] = self.cfg['Global'].get('epoch_num')
+                wandb_config['lr'] = self.cfg.get('Optimizer', {}).get('lr')
                 self.wandb_run = wandb.init(
                     project=self.cfg['Global'].get('wandb_project', 'DDSTR'),
                     name=run_name,
-                    config=self.cfg,
+                    config=wandb_config,
                 )
             if self.cfg['Global']['use_tensorboard']:
                 from torch.utils.tensorboard import SummaryWriter
@@ -635,6 +639,11 @@ class Trainer(object):
                     self.best_metric[self.eval_class.main_indicator],
                     global_step,
                 )
+
+            if self.wandb_run is not None:
+                import wandb
+                self.wandb_run.summary['best_acc'] = self.best_metric.get('acc', 0)
+                self.wandb_run.summary['best_epoch'] = self.best_metric.get('best_epoch', 0)
 
             save_ckpt(self.model,
                       self.cfg,
