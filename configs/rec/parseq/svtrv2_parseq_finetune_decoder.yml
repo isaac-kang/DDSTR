@@ -7,7 +7,7 @@
 
 Global:
   device: gpu
-  epoch_num: 5
+  epoch_num: 10
   log_smooth_window: 20
   print_batch_step: 10
   output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder/
