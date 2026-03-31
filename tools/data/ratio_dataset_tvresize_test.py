@@ -256,7 +256,7 @@ class RatioDataSetTVResizeTest(Dataset):
             ids = random.sample(ratio_ids, 1)
             return self.__getitem__([img_width, img_height, ids[0], ratio])
         img, label = sample_info
-        data = {'image': img, 'label': label}
+        data = {'image': img, 'label': label, 'file_idx': file_idx}
         outs = transform(data, self.ops[:-1])
         if outs is not None:
             outs = self.resize_norm_img(outs, ratio, padding=False)
