@@ -336,74 +336,56 @@ class IGTRARScorer:
 
 
 class PARSeqScorer:
-    """Score via PARSeq NAR (parallel) decoding — single forward pass.
+    """Score from PARSeq full inference (AR + refine) output.
 
-    Input is just <bos>, all positions queried simultaneously (no AR context).
-    Pred score = mean log prob of pred tokens from the NAR logits.
+    Geometric mean of argmax probs from the final output logits.
     """
 
     def __init__(self, post_process, device):
         self.device = device
         self.post_process = post_process
         self.eos_id = 0
-        self.bos_id = len(post_process.character) - 2
-        self.pad_id = len(post_process.character) - 1
 
-    def score(self, model, images, labels):
+    def score(self, model, images, labels, **kwargs):
         """Returns (preds_text, pred_scores, gt_scores)."""
-        bs = images.shape[0]
-        device = images.device
-
-        x = images
-        if hasattr(model, 'transform') and model.transform is not None:
-            x = model.transform(x)
-        if hasattr(model, 'encoder') and model.encoder is not None:
-            x = model.encoder(x)
-
-        decoder = model.decoder
-        num_steps = decoder.max_label_length + 1
-        pos_queries = decoder.pos_queries[:, :num_steps].expand(bs, -1, -1)
-
-        # NAR: BOS only, query all positions at once
-        tgt_in = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=device)
         with torch.no_grad():
-            tgt_out = decoder.decode(tgt_in, x,
-                                     tgt_query=pos_queries,
-                                     pos_query=pos_queries)
-            logits = decoder.head(tgt_out)  # (B, num_steps, C)
+            probs = model(images)  # (B, num_steps, C) softmaxed
 
-        probs = logits.softmax(-1)
+        B, L1, C = probs.shape
         probs_np = probs.detach().cpu().numpy()
         pred_results = self.post_process(probs_np)
         preds_text = [r[0] for r in pred_results]
 
-        pred_token_ids = logits.argmax(-1)  # (B, num_steps)
-        log_probs = logits.log_softmax(-1)  # (B, num_steps, C)
+        pred_token_ids = probs.argmax(-1)
+        max_probs = probs.max(-1).values
 
-        pred_scores = torch.zeros(bs, device='cpu')
-        gt_scores = torch.zeros(bs, device='cpu')
+        pred_scores = torch.zeros(B, device='cpu')
+        gt_scores = torch.zeros(B, device='cpu')
+        self.last_char_probs = []
 
-        for b in range(bs):
-            # Pred score
+        for b in range(B):
             eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
-            eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else num_steps - 1
-            valid_len = eos_pos + 1
-
-            pred_tok = pred_token_ids[b, :valid_len]
-            pred_log_p = log_probs[b, :valid_len].gather(1, pred_tok.unsqueeze(1)).squeeze(1)
-            pred_scores[b] = pred_log_p.mean()
-
-            # GT score — not used for conf_str, kept for interface compatibility
+            eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
+            valid_len = eos_pos  # EOS 제외
+            if valid_len == 0:
+                pred_scores[b] = float('-inf')
+                continue
+            pred_scores[b] = max_probs[b, :valid_len].log().mean()
             gt_scores[b] = 0.0
+
+        b = B - 1
+        eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
+        eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
+        self.last_char_probs = max_probs[b, :eos_pos].detach().cpu().tolist()
 
         return preds_text, pred_scores, gt_scores
 
 
 class MDiffScorer:
-    """Score via MDiff4STR parallel decoding — single forward pass.
+    """Score from MDiff4STR full inference output.
 
-    All positions are masked, decoded in one forward pass.
-    Pred score = mean log prob of pred tokens from the PD logits.
+    Uses the model's configured decoding mode (e.g. semi-AR).
+    Geometric mean of argmax probs from the final output logits.
     """
 
     def __init__(self, post_process, device):
@@ -411,43 +393,37 @@ class MDiffScorer:
         self.post_process = post_process
         self.eos_id = 0
 
-    def score(self, model, images, labels):
+    def score(self, model, images, labels, **kwargs):
         """Returns (preds_text, pred_scores, gt_scores)."""
-        # Force parallel decoding
-        decoder = model.decoder
-        orig_pd, orig_semiar = decoder.pd, decoder.semiar
-        decoder.pd = True
-        decoder.semiar = False
-
         with torch.no_grad():
             probs = model(images)  # (B, L+1, C) softmaxed
 
-        decoder.pd = orig_pd
-        decoder.semiar = orig_semiar
-
         B, L1, C = probs.shape
-
         probs_np = probs.detach().cpu().numpy()
         pred_results = self.post_process(probs_np)
         preds_text = [r[0] for r in pred_results]
 
-        pred_token_ids = probs.argmax(-1)  # (B, L+1)
-        log_probs = probs.clamp(min=1e-10).log()  # (B, L+1, C)
+        pred_token_ids = probs.argmax(-1)
+        max_probs = probs.max(-1).values
 
         pred_scores = torch.zeros(B)
         gt_scores = torch.zeros(B)
+        self.last_char_probs = []
 
         for b in range(B):
             eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
             eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
-            valid_len = eos_pos + 1
-
-            pred_tok = pred_token_ids[b, :valid_len]
-            pred_log_p = log_probs[b, :valid_len].gather(1, pred_tok.unsqueeze(1)).squeeze(1)
-            pred_scores[b] = pred_log_p.mean()
-
-            # GT score — not used for conf_str, kept for interface compatibility
+            valid_len = eos_pos  # EOS 제외
+            if valid_len == 0:
+                pred_scores[b] = float('-inf')
+                continue
+            pred_scores[b] = max_probs[b, :valid_len].log().mean()
             gt_scores[b] = 0.0
+
+        b = B - 1
+        eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
+        eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
+        self.last_char_probs = max_probs[b, :eos_pos].detach().cpu().tolist()
 
         return preds_text, pred_scores, gt_scores
 

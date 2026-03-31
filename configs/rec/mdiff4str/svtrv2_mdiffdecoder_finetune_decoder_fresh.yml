@@ -37,7 +37,7 @@ Optimizer:
 
 LRScheduler:
   name: OneCycleLR
-  warmup_epoch: 1.5
+  warmup_epoch: 1
   cycle_momentum: False
 
 Architecture:

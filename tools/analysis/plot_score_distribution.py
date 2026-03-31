@@ -59,11 +59,12 @@ def categorize(entry):
 
 
 def load_image_from_lmdb(eval_root, dataset_name, image_index):
-    """Load raw image bytes from eval LMDB."""
+    """Load raw image bytes from eval LMDB. CSV index is 0-based, LMDB is 1-based."""
     lmdb_dir = os.path.join(eval_root, dataset_name)
+    lmdb_index = image_index + 1  # 0-based CSV -> 1-based LMDB
     env = lmdb_lib.open(lmdb_dir, readonly=True, lock=False, readahead=False, meminit=False)
     with env.begin(buffers=True) as txn:
-        img_key = f'image-{image_index:09d}'.encode()
+        img_key = f'image-{lmdb_index:09d}'.encode()
         imgbuf = txn.get(img_key)
         imgbuf = bytes(imgbuf)
     env.close()
@@ -87,7 +88,8 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
     char_num = post_process.get_character_num()
     cfg['Architecture']['Decoder']['out_channels'] = char_num
     model = build_model(cfg['Architecture'])
-    if checkpoint_path:
+    # -o Global.pretrained_model=... takes precedence over --checkpoint
+    if not cfg['Global'].get('pretrained_model'):
         cfg['Global']['pretrained_model'] = checkpoint_path
     load_ckpt(model, cfg)
     model.eval().to(device)
@@ -109,6 +111,7 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
     ops = create_operators(img_transforms, cfg['Global'])
 
     pred_score_list = []
+    per_char_list = []  # list of {'pred_text': str, 'chars': [ch], 'probs': [float]}
     print(f'Computing STR scores ({len(entries)} samples)...')
     with torch.inference_mode():
         for i, entry in enumerate(entries):
@@ -117,6 +120,7 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
             data = transform(data, ops)
             if data is None:
                 pred_score_list.append(0.5)
+                per_char_list.append({'pred_text': '', 'chars': [], 'probs': []})
                 continue
             img = data[0]
             if isinstance(img, np.ndarray):
@@ -127,12 +131,21 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
             pred_lp = pred_scores[0].item()
             pred_score_list.append(np.exp(pred_lp))
 
+            # Collect per-char probs from scorer's last forward
+            pred_text = preds_text[0]
+            char_probs = scorer.last_char_probs if hasattr(scorer, 'last_char_probs') else []
+            per_char_list.append({
+                'pred_text': pred_text,
+                'chars': list(pred_text),
+                'probs': char_probs,
+            })
+
             if (i + 1) % 50 == 0:
                 print(f'  {i + 1}/{len(entries)}')
 
     del model
     torch.cuda.empty_cache()
-    return pred_score_list
+    return pred_score_list, per_char_list
 
 
 # ===================== LLM Scoring =====================
@@ -247,6 +260,54 @@ def plot_strip(ax, data_by_cat, cats, colors, bins, xlabel, title):
     ax.set_title(title, fontsize=13)
 
 
+def _save_per_char_xlsx(entries, conf_str, per_char_list, output_path):
+    """Save per-character NAR probs to Excel."""
+    xlsx_path = output_path.replace('.png', '_char_probs.xlsx')
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        print(f'openpyxl not installed, skipping {xlsx_path}')
+        return
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'NAR Char Probs'
+
+    headers = ['dataset', 'index', 'gt', 'NAR_pred', 'category',
+               'str_score', 'pos', 'char', 'prob']
+    header_font = Font(bold=True)
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=1, column=col, value=h).font = header_font
+
+    red_fill = PatternFill(start_color='FFCCCC', end_color='FFCCCC', fill_type='solid')
+    row = 2
+    for i, (entry, pc) in enumerate(zip(entries, per_char_list)):
+        chars = pc['chars']
+        probs = pc['probs']
+        n_chars = max(len(chars), 1)
+        for j in range(n_chars):
+            if j == 0:
+                ws.cell(row=row, column=1, value=entry['dataset_name'])
+                ws.cell(row=row, column=2, value=entry['image_index'])
+                ws.cell(row=row, column=3, value=entry['gt'])
+                ws.cell(row=row, column=4, value=pc['pred_text'])
+                ws.cell(row=row, column=5, value=entry.get('category', ''))
+                ws.cell(row=row, column=6, value=round(float(conf_str[i]), 4))
+            ws.cell(row=row, column=7, value=j)
+            if j < len(chars):
+                ws.cell(row=row, column=8, value=chars[j])
+            if j < len(probs):
+                c = ws.cell(row=row, column=9, value=round(probs[j], 4))
+                if probs[j] < 0.5:
+                    c.fill = red_fill
+            row += 1
+
+    os.makedirs(os.path.dirname(xlsx_path) or '.', exist_ok=True)
+    wb.save(xlsx_path)
+    print(f'Per-char probs saved to {xlsx_path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--csv', default='tools/analysis/PL_oracle.csv')
@@ -262,6 +323,10 @@ def main():
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--alpha', type=float, default=0.5,
                         help='Blending weight: alpha*STR + (1-alpha)*LLM')
+    parser.add_argument('--gamma_str', type=float, default=1.0,
+                        help='Exponent for STR score: conf_str^gamma_str')
+    parser.add_argument('--gamma_llm', type=float, default=1.0,
+                        help='Exponent for LLM score: conf_llm^gamma_llm')
     parser.add_argument('--threshold', type=float, default=0.5,
                         help='Decision threshold: score >= threshold -> pred, else -> gt')
     parser.add_argument('--str_cache', default=None,
@@ -310,6 +375,8 @@ def main():
 
     import json
     alpha = args.alpha
+    gamma_str = args.gamma_str
+    gamma_llm = args.gamma_llm
     threshold = args.threshold
     use_str = not args.llm_only
     use_llm = not args.str_only
@@ -319,6 +386,7 @@ def main():
     if use_str:
         str_cache_path = args.str_cache
         use_str_cache = not args.no_str_cache and os.path.exists(str_cache_path)
+        per_char_list = None
         if use_str_cache:
             with open(str_cache_path, 'r') as f:
                 str_cache = json.load(f)
@@ -327,7 +395,7 @@ def main():
             pred_score_list = [str_lookup.get((e['dataset_name'], e['image_index']), {}).get('pred_score', 0.5) for e in entries]
             print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
         else:
-            pred_score_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
+            pred_score_list, per_char_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
             str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
             str_cache = {
                 'str_model': str_model_name,
@@ -343,7 +411,11 @@ def main():
                 json.dump(str_cache, f, indent=2)
             print(f'STR scores cached to {str_cache_path} (model: {str_model_name})')
 
-        conf_str = np.array(pred_score_list)
+        conf_str = np.array(pred_score_list) ** gamma_str
+
+        # Save per-char probs to Excel
+        if per_char_list:
+            _save_per_char_xlsx(entries, conf_str, per_char_list, args.output)
 
     # --- LLM scores ---
     if use_llm:
@@ -372,7 +444,7 @@ def main():
                 json.dump(cache, f, indent=2)
             print(f'LLM scores cached to {llm_cache_path} (model: {args.llm_model})')
 
-        conf_llm = np.array(llm_score_list)
+        conf_llm = np.array(llm_score_list) ** gamma_llm
 
     # --- Fusion ---
     if use_str and use_llm:
