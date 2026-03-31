@@ -10,7 +10,7 @@ Global:
   epoch_num: 5
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder_1.5_5_0.0002/
+  output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder_1.5_5_3e-4/
   save_epoch_step: [0, 1]
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
