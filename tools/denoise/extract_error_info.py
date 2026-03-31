@@ -335,12 +335,11 @@ class IGTRARScorer:
         return scores
 
 
-class PARSeqARScorer:
-    """S(seq) via 2-stage PARSeq: AR decode → Cloze refinement scoring.
+class PARSeqScorer:
+    """Score via PARSeq NAR (parallel) decoding — single forward pass.
 
-    Stage 1 (AR): greedy decode to get Y_ar_pred.
-    Stage 2 (Cloze): feed Y_ar_pred into cloze refinement, score GT/pred
-                     from the refinement logits.
+    Input is just <bos>, all positions queried simultaneously (no AR context).
+    Pred score = mean log prob of pred tokens from the NAR logits.
     """
 
     def __init__(self, post_process, device):
@@ -350,19 +349,11 @@ class PARSeqARScorer:
         self.bos_id = len(post_process.character) - 2
         self.pad_id = len(post_process.character) - 1
 
-    def _encode_sequence(self, text):
-        indices = []
-        for ch in text:
-            if ch in self.post_process.dict:
-                indices.append(self.post_process.dict[ch])
-        return indices
-
     def score(self, model, images, labels):
         """Returns (preds_text, pred_scores, gt_scores)."""
         bs = images.shape[0]
         device = images.device
 
-        # Get encoder output
         x = images
         if hasattr(model, 'transform') and model.transform is not None:
             x = model.transform(x)
@@ -373,96 +364,46 @@ class PARSeqARScorer:
         num_steps = decoder.max_label_length + 1
         pos_queries = decoder.pos_queries[:, :num_steps].expand(bs, -1, -1)
 
-        # Stage 1: AR greedy decode
-        tgt_mask = query_mask = torch.triu(
-            torch.full((num_steps, num_steps), float('-inf'), device=device), 1)
-        tgt_in = torch.full((bs, num_steps), self.pad_id, dtype=torch.long, device=device)
-        tgt_in[:, 0] = self.bos_id
-
-        ar_logits = []
+        # NAR: BOS only, query all positions at once
+        tgt_in = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=device)
         with torch.no_grad():
-            for i in range(num_steps):
-                j = i + 1
-                tgt_out = decoder.decode(
-                    tgt_in[:, :j], x,
-                    tgt_mask[:j, :j],
-                    tgt_query=pos_queries[:, i:j],
-                    tgt_query_mask=query_mask[i:j, :j],
-                    pos_query=pos_queries,
-                )
-                p_i = decoder.head(tgt_out)
-                ar_logits.append(p_i)
-                if j < num_steps:
-                    tgt_in[:, j] = p_i.squeeze(-2).argmax(-1)
+            tgt_out = decoder.decode(tgt_in, x,
+                                     tgt_query=pos_queries,
+                                     pos_query=pos_queries)
+            logits = decoder.head(tgt_out)  # (B, num_steps, C)
 
-            ar_logits = torch.cat(ar_logits, dim=1)  # (B, num_steps, C)
-            ar_pred = ar_logits.argmax(-1)  # (B, num_steps)
-
-        # Get pred text from AR output
-        probs = ar_logits.softmax(-1)
+        probs = logits.softmax(-1)
         probs_np = probs.detach().cpu().numpy()
         pred_results = self.post_process(probs_np)
         preds_text = [r[0] for r in pred_results]
 
-        # Stage 2: Cloze refinement with AR pred as input
-        # Build cloze mask (each position sees all other positions)
-        cloze_query_mask = query_mask.clone()
-        cloze_query_mask[torch.triu(
-            torch.ones(num_steps, num_steps, dtype=torch.bool, device=device), 2)] = 0
+        pred_token_ids = logits.argmax(-1)  # (B, num_steps)
+        log_probs = logits.log_softmax(-1)  # (B, num_steps, C)
 
-        bos = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=device)
-        cloze_in = torch.cat([bos, ar_pred[:, :-1]], dim=1)
-        tgt_padding_mask = (cloze_in == self.eos_id).int().cumsum(-1) > 0
-
-        with torch.no_grad():
-            tgt_out = decoder.decode(
-                cloze_in, x, tgt_mask, tgt_padding_mask,
-                tgt_query=pos_queries,
-                tgt_query_mask=cloze_query_mask[:, :cloze_in.shape[1]],
-                pos_query=pos_queries,
-            )
-            refine_logits = decoder.head(tgt_out)  # (B, num_steps, C)
-
-        log_probs = refine_logits.log_softmax(-1)  # (B, num_steps, C)
-
-        # Score pred and GT from refinement logits
         pred_scores = torch.zeros(bs, device='cpu')
         gt_scores = torch.zeros(bs, device='cpu')
 
         for b in range(bs):
-            # Pred score: score of AR pred tokens in refinement logits
-            pred_indices = ar_pred[b].cpu().tolist()
-            pred_len = 0
-            pred_lp = 0.0
-            for i, idx in enumerate(pred_indices):
-                if idx == self.eos_id:
-                    pred_lp += log_probs[b, i, idx].item()
-                    pred_len += 1
-                    break
-                pred_lp += log_probs[b, i, idx].item()
-                pred_len += 1
-            pred_scores[b] = pred_lp / max(pred_len, 1)
+            # Pred score
+            eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
+            eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else num_steps - 1
+            valid_len = eos_pos + 1
 
-            # GT score: score of GT tokens in refinement logits
-            gt_indices = self._encode_sequence(labels[b])
-            if not gt_indices:
-                gt_scores[b] = float('-inf')
-                continue
-            gt_lp = 0.0
-            gt_len = len(gt_indices) + 1  # +1 for EOS
-            for i, idx in enumerate(gt_indices):
-                gt_lp += log_probs[b, i, idx].item()
-            gt_lp += log_probs[b, len(gt_indices), self.eos_id].item()
-            gt_scores[b] = gt_lp / gt_len
+            pred_tok = pred_token_ids[b, :valid_len]
+            pred_log_p = log_probs[b, :valid_len].gather(1, pred_tok.unsqueeze(1)).squeeze(1)
+            pred_scores[b] = pred_log_p.mean()
+
+            # GT score — not used for conf_str, kept for interface compatibility
+            gt_scores[b] = 0.0
 
         return preds_text, pred_scores, gt_scores
 
 
 class MDiffScorer:
-    """Score GT/pred from final inference logits of MDiff4STR.
+    """Score via MDiff4STR parallel decoding — single forward pass.
 
-    Runs normal inference (e.g. semi-AR decoding), takes the final output probs,
-    and scores both pred and GT tokens from the same logit distribution.
+    All positions are masked, decoded in one forward pass.
+    Pred score = mean log prob of pred tokens from the PD logits.
     """
 
     def __init__(self, post_process, device):
@@ -470,20 +411,21 @@ class MDiffScorer:
         self.post_process = post_process
         self.eos_id = 0
 
-    def _encode_sequence(self, text):
-        indices = []
-        for ch in text:
-            if ch in self.post_process.dict:
-                indices.append(self.post_process.dict[ch])
-        return indices
-
     def score(self, model, images, labels):
         """Returns (preds_text, pred_scores, gt_scores)."""
+        # Force parallel decoding
+        decoder = model.decoder
+        orig_pd, orig_semiar = decoder.pd, decoder.semiar
+        decoder.pd = True
+        decoder.semiar = False
+
         with torch.no_grad():
-            probs = model(images)  # (B, L+1, C)
+            probs = model(images)  # (B, L+1, C) softmaxed
+
+        decoder.pd = orig_pd
+        decoder.semiar = orig_semiar
 
         B, L1, C = probs.shape
-        device = probs.device
 
         probs_np = probs.detach().cpu().numpy()
         pred_results = self.post_process(probs_np)
@@ -496,7 +438,6 @@ class MDiffScorer:
         gt_scores = torch.zeros(B)
 
         for b in range(B):
-            # Pred score
             eos_hits = (pred_token_ids[b] == self.eos_id).nonzero(as_tuple=True)[0]
             eos_pos = eos_hits[0].item() if len(eos_hits) > 0 else L1 - 1
             valid_len = eos_pos + 1
@@ -505,22 +446,8 @@ class MDiffScorer:
             pred_log_p = log_probs[b, :valid_len].gather(1, pred_tok.unsqueeze(1)).squeeze(1)
             pred_scores[b] = pred_log_p.mean()
 
-            # GT score from same logits
-            gt_indices = self._encode_sequence(labels[b])
-            if not gt_indices:
-                gt_scores[b] = float('-inf')
-                continue
-
-            gt_len = len(gt_indices) + 1  # +1 for EOS
-            score_len = min(L1, gt_len)
-            gt_tok = torch.zeros(score_len, dtype=torch.long, device=device)
-            n_chars = min(len(gt_indices), score_len)
-            gt_tok[:n_chars] = torch.tensor(gt_indices[:n_chars], dtype=torch.long, device=device)
-            if score_len == gt_len:
-                gt_tok[len(gt_indices)] = self.eos_id
-
-            gt_log_p = log_probs[b, :score_len].gather(1, gt_tok.unsqueeze(1)).squeeze(1)
-            gt_scores[b] = gt_log_p.mean()
+            # GT score — not used for conf_str, kept for interface compatibility
+            gt_scores[b] = 0.0
 
         return preds_text, pred_scores, gt_scores
 
@@ -571,7 +498,7 @@ def get_scorer(model_type, post_process, device):
     elif model_type == 'igtr_ar':
         return IGTRARScorer(post_process, device)
     elif model_type == 'parseq_ar':
-        return PARSeqARScorer(post_process, device)
+        return PARSeqScorer(post_process, device)
     elif model_type == 'mdiff_blc':
         return MDiffScorer(post_process, device)
     else:

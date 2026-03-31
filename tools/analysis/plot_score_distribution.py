@@ -390,6 +390,15 @@ def main():
             print(f'{cat:<12} {mask.sum():>4}  {conf_str[mask].mean():>12.4f}')
         print(f'{"ALL":<12} {n_entries:>4}  {conf_str.mean():>12.4f}')
 
+        # Per-sample STR scores (descending)
+        sorted_idx = np.argsort(-conf_str)
+        print(f'\n--- STR scores (descending) ---')
+        print(f'{"rank":<6} {"conf_str":>10} {"category":<12} {"pred":<20} {"gt":<20} {"PL":<20} {"dataset":<16} {"idx":>6}')
+        print('-' * 110)
+        for rank, si in enumerate(sorted_idx):
+            e = entries[si]
+            print(f'{rank+1:<6} {conf_str[si]:>10.4f} {e["category"]:<12} {e["pred"]:<20} {e["gt"]:<20} {e["PL"]:<20} {e["dataset_name"]:<16} {e["image_index"]:>6}')
+
     # --- Save scores to CSV ---
     scores_path = args.output.replace('.png', '_scores.csv')
     with open(scores_path, 'w', newline='', encoding='utf-8') as f:
