@@ -10,7 +10,7 @@ Global:
   epoch_num: 10
   log_smooth_window: 20
   print_batch_step: 10
-  output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder/
+  output_dir: ./output/rec/u14m_filter/svtrv2_parseq_finetune_decoder_1.5_10_0.0002/
   save_epoch_step: [0, 1]
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
@@ -32,7 +32,7 @@ Global:
 
 Optimizer:
   name: AdamW
-  lr: 0.0001
+  lr: 0.0002
   weight_decay: 0.05
   filter_bias_and_bn: True
 
