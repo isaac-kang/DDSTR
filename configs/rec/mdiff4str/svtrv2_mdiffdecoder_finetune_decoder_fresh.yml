@@ -14,7 +14,7 @@ Global:
   eval_batch_step: [0, 500]
   eval_epoch_step: [0, 1]
   cal_metric_during_train: False
-  pretrained_model: ./pretrained/svtrv2_smtr_gtc_rctc/best.pth
+  pretrained_model: ./pretrained/mdiff4str_base/best.pth
   checkpoints:
   use_tensorboard: false
   use_wandb: true
