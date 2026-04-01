@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import math
 import csv
 import io
 import os
@@ -20,6 +21,8 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
+from torchvision import transforms as T
+from torchvision.transforms import functional as TF
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(__dir__, '..')))
@@ -115,7 +118,7 @@ def load_entries(path):
 def categorize(entry):
     pl = entry['PL']
     if pl == '' or pl is None:
-        return 'blank'
+        return 'other'
     if pl == entry['pred']:
         return 'PL=pred'
     if pl == entry['gt']:
@@ -163,16 +166,24 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
     scorer = get_scorer(model_type, post_process, device)
 
     eval_cfg = cfg.get('Eval', cfg.get('Train', {}))
-    transforms_cfg = eval_cfg.get('dataset', {}).get('transforms', [])
+    ds_cfg = eval_cfg.get('dataset', {})
+    padding = ds_cfg.get('padding', False)
+    base_shape = ds_cfg.get('base_shape', [[64, 64], [96, 48], [112, 40], [128, 32]])
+    base_h = ds_cfg.get('base_h', 32)
+
+    # Build transforms for decoding image (same as RatioDataSetTVResize)
+    transforms_cfg = ds_cfg.get('transforms', [])
     img_transforms = []
     for t in transforms_cfg:
         if isinstance(t, dict):
             name = list(t.keys())[0]
             if 'Encode' not in name and 'KeepKeys' not in name:
                 img_transforms.append(t)
-    img_transforms.append({'RecTVResize': {'image_shape': [32, 128], 'padding': False}})
     img_transforms.append({'KeepKeys': {'keep_keys': ['image']}})
-    ops = create_operators(img_transforms, cfg['Global'])
+    decode_ops = create_operators(img_transforms, cfg['Global'])
+
+    interpolation = T.InterpolationMode.BICUBIC
+    img_normalize = T.Compose([T.ToTensor(), T.Normalize(0.5, 0.5)])
 
     pred_score_list = []
     gt_score_list = []
@@ -181,16 +192,32 @@ def compute_str_scores(entries, config_path, checkpoint_path, eval_root, device,
     with torch.inference_mode():
         for i, entry in enumerate(entries):
             imgbuf = load_image_from_lmdb(eval_root, entry['dataset_name'], entry['image_index'])
+            # Decode image (apply non-Encode, non-KeepKeys transforms)
             data = {'image': imgbuf, 'label': entry['gt']}
-            data = transform(data, ops)
+            data = transform(data, decode_ops)
             if data is None:
                 pred_score_list.append(0.0)
                 gt_score_list.append(0.0)
                 per_char_list.append({'pred_text': '', 'chars': [], 'probs': []})
                 continue
-            img = data[0]
-            if isinstance(img, np.ndarray):
-                img = torch.from_numpy(img)
+            pil_img = data[0]
+            w, h = pil_img.size
+            ratio = max(1, round(w / h))
+            # Match RatioDataSetTVResize.resize_norm_img
+            if ratio <= 4:
+                imgW, imgH = base_shape[ratio - 1]
+            else:
+                imgW, imgH = base_h * ratio, base_h
+            if not padding:
+                resized_w = imgW
+            else:
+                r = w / float(h)
+                import math
+                resized_w = min(imgW, math.ceil(imgH * r))
+            resized_image = TF.resize(pil_img, (imgH, resized_w), interpolation=interpolation)
+            img = img_normalize(resized_image)
+            if resized_w < imgW and padding:
+                img = TF.pad(img, [imgW - resized_w, 0, 0, 0], fill=0.)
             img = img.unsqueeze(0).to(device)
 
             preds_text, pred_scores, gt_scores = scorer.score(model, img, [entry['gt']])
@@ -225,7 +252,7 @@ def build_prompt(pred, gt):
 
 
 def extract_llm_logodds(output):
-    """Extract r_LLM = lp("1") - lp("2") from vLLM output."""
+    """Extract lo_llm = lp("1") - lp("2") from vLLM output."""
     logprobs_list = output.outputs[0].logprobs
     if not logprobs_list:
         return 0.0
@@ -277,7 +304,7 @@ def extract_llm_logodds(output):
 
 
 def compute_llm_scores(entries, llm_model_name, device):
-    """Compute r_llm = lp("1") - lp("2") for each entry using vLLM."""
+    """Compute lo_llm = lp("1") - lp("2") for each entry using vLLM."""
     from vllm import LLM, SamplingParams
 
     print(f'Loading LLM: {llm_model_name}...')
@@ -295,11 +322,11 @@ def compute_llm_scores(entries, llm_model_name, device):
     print(f'Computing LLM scores ({len(entries)} samples)...')
     outputs = llm.chat(conversations, sampling_params=sampling_params, **chat_kwargs)
 
-    r_llm_list = [extract_llm_logodds(output) for output in outputs]
+    lo_llm_list = [extract_llm_logodds(output) for output in outputs]
 
     del llm
     torch.cuda.empty_cache()
-    return r_llm_list
+    return lo_llm_list
 
 
 # ===================== Plotting =====================
@@ -476,9 +503,9 @@ def main():
     }
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--csv', default='tools/analysis/PL_oracle.csv',
-                        help='CSV or Excel (.xlsx) with PL labels')
-    parser.add_argument('--model', type=str, default=None,
+    parser.add_argument('--csv', default=None,
+                        help='CSV or Excel (.xlsx) with PL labels (default: output/analysis/error_list_{model}.xlsx)')
+    parser.add_argument('--model', type=str, required=True,
                         choices=list(MODEL_PRESETS.keys()),
                         help='Model preset (auto-sets config/checkpoint)')
     parser.add_argument('--config', '-c', default=None, help='STR model config')
@@ -489,10 +516,8 @@ def main():
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--alpha', type=float, default=0.5,
                         help='Blending weight: alpha*STR + (1-alpha)*LLM')
-    parser.add_argument('--gamma_str', type=float, default=1.0,
-                        help='Exponent for STR score: conf_str^gamma_str')
-    parser.add_argument('--gamma_llm', type=float, default=1.0,
-                        help='Exponent for LLM score: conf_llm^gamma_llm')
+    parser.add_argument('--lo_clip', type=float, default=5.0,
+                        help='Clip log-odds to [-lo_clip, lo_clip]')
     parser.add_argument('--threshold', type=float, default=0.5,
                         help='Decision threshold: score >= threshold -> pred, else -> gt')
     parser.add_argument('--str_cache', default=None,
@@ -507,30 +532,29 @@ def main():
                         help='Compute STR scores only (skip LLM)')
     parser.add_argument('--llm_only', action='store_true',
                         help='Compute LLM scores only (skip STR)')
-    parser.add_argument('--output', default='output/analysis/score_distribution.png')
+    parser.add_argument('--output', default=None,
+                        help='Output plot path (default: output/analysis/score_distribution_{model}.png)')
     parser.add_argument('-o', '--opt', nargs='*', default=[],
                         help='Override config options, e.g. -o Architecture.Decoder.decoding_mode=greedy')
     args = parser.parse_args()
 
     # Resolve model preset
-    if args.model:
-        preset = MODEL_PRESETS[args.model]
-        if args.config is None:
-            args.config = preset['config']
-        if args.checkpoint is None:
-            args.checkpoint = preset['checkpoint']
-    else:
-        if args.config is None:
-            args.config = 'configs/rec/mdiff4str/svtrv2_mdiffdecoder_base.yml'
-        if args.checkpoint is None:
-            args.checkpoint = 'pretrained/mdiff4str_base/best.pth'
+    preset = MODEL_PRESETS[args.model]
+    if args.config is None:
+        args.config = preset['config']
+    if args.checkpoint is None:
+        args.checkpoint = preset['checkpoint']
 
+    str_model_name = args.model
+    if args.csv is None:
+        args.csv = f'output/analysis/error_list_{str_model_name}.xlsx'
+    if args.output is None:
+        args.output = f'output/analysis/score_distribution_{str_model_name}.png'
     if args.str_cache is None:
-        str_model_name = args.model or f'{Path(args.config).parent.name}-{Path(args.config).stem}'
         args.str_cache = f'tools/analysis/str_scores_cache_{str_model_name}.json'
     if args.llm_cache is None:
         llm_model_name = args.llm_model.replace('/', '-')
-        args.llm_cache = f'tools/analysis/llm_scores_cache_{llm_model_name}.json'
+        args.llm_cache = f'tools/analysis/llm_scores_cache_{str_model_name}_{llm_model_name}.json'
     # Parse -o overrides into dict
     opt_overrides = {}
     for s in args.opt:
@@ -548,15 +572,14 @@ def main():
     for e in entries:
         e['category'] = categorize(e)
     print(f'Loaded {len(entries)} samples')
-    for cat in ['PL=pred', 'PL=gt', 'PL=other', 'blank']:
+    for cat in ['PL=pred', 'PL=gt', 'PL=other', 'other']:
         n = sum(1 for e in entries if e['category'] == cat)
         if n > 0:
             print(f'  {cat}: {n}')
 
     import json
     alpha = args.alpha
-    gamma_str = args.gamma_str
-    gamma_llm = args.gamma_llm
+    lo_clip = args.lo_clip
     threshold = args.threshold
     use_str = not args.llm_only
     use_llm = not args.str_only
@@ -577,7 +600,6 @@ def main():
             print(f'Loaded STR scores from cache: {str_cache_path} (model: {cached_model})')
         else:
             pred_lp_list, gt_lp_list, per_char_list = compute_str_scores(entries, args.config, args.checkpoint, args.eval_root, args.device, opt_overrides)
-            str_model_name = f'{Path(args.config).parent.name}-{Path(args.config).stem}'
             str_cache = {
                 'str_model': str_model_name,
                 'config': args.config,
@@ -594,8 +616,8 @@ def main():
 
         pred_lp = np.array(pred_lp_list)
         gt_lp = np.array(gt_lp_list)
-        r_str = pred_lp - gt_lp
-        conf_str = sigmoid(r_str * gamma_str)
+        lo_str = np.clip(pred_lp - gt_lp, -lo_clip, lo_clip)
+        conf_str = sigmoid(lo_str)
 
         # Save per-char probs to Excel
         if per_char_list:
@@ -615,38 +637,39 @@ def main():
             else:
                 scores_list = cache['scores']
                 cached_model = cache.get('llm_model', 'unknown')
-            cache_lookup = {(r['dataset_name'], r['image_index']): r.get('r_llm', r.get('llm_score', 0.0)) for r in scores_list}
-            r_llm_list = [cache_lookup.get((e['dataset_name'], e['image_index']), 0.0) for e in entries]
+            cache_lookup = {(r['dataset_name'], r['image_index']): r.get('lo_llm', r.get('llm_score', 0.0)) for r in scores_list}
+            lo_llm_list = [cache_lookup.get((e['dataset_name'], e['image_index']), 0.0) for e in entries]
             print(f'Loaded LLM scores from cache: {llm_cache_path} (model: {cached_model})')
         else:
-            r_llm_list = compute_llm_scores(entries, args.llm_model, args.device)
+            lo_llm_list = compute_llm_scores(entries, args.llm_model, args.device)
             cache = {'llm_model': args.llm_model,
                      'scores': [{'dataset_name': e['dataset_name'], 'image_index': e['image_index'],
-                                 'pred': e['pred'], 'gt': e['gt'], 'r_llm': s}
-                                for e, s in zip(entries, r_llm_list)]}
+                                 'pred': e['pred'], 'gt': e['gt'], 'lo_llm': s}
+                                for e, s in zip(entries, lo_llm_list)]}
             os.makedirs(os.path.dirname(llm_cache_path) or '.', exist_ok=True)
             with open(llm_cache_path, 'w') as f:
                 json.dump(cache, f, indent=2)
             print(f'LLM scores cached to {llm_cache_path} (model: {args.llm_model})')
 
-        r_llm = np.array(r_llm_list)
-        conf_llm = sigmoid(r_llm * gamma_llm)
+        lo_llm = np.clip(np.array(lo_llm_list), -lo_clip, lo_clip)
+        conf_llm = sigmoid(lo_llm)
 
     # --- Fusion ---
     if use_str and use_llm:
-        conf_fusion = alpha * conf_str + (1 - alpha) * conf_llm
+        lo_fusion = alpha * lo_str + (1 - alpha) * lo_llm
+        conf_fusion = sigmoid(lo_fusion)
 
     # --- Category-wise stats ---
     if use_str:
-        print(f'\n--- Category-wise STR scores (gamma_str={gamma_str}) ---')
-        print(f'{"category":<12} {"n":>4}  {"pred_lp":>10} {"gt_lp":>10} {"r_str":>10} {"conf_str":>10}')
+        print(f'\n--- Category-wise STR scores (lo_clip={lo_clip}) ---')
+        print(f'{"category":<12} {"n":>4}  {"pred_lp":>10} {"gt_lp":>10} {"lo_str":>10} {"conf_str":>10}')
         print('-' * 60)
-        for cat in ['PL=pred', 'PL=gt', 'PL=other', 'blank']:
+        for cat in ['PL=pred', 'PL=gt', 'PL=other', 'other']:
             mask = np.array([e['category'] == cat for e in entries])
             if not mask.any():
                 continue
-            print(f'{cat:<12} {mask.sum():>4}  {pred_lp[mask].mean():>10.3f} {gt_lp[mask].mean():>10.3f} {r_str[mask].mean():>10.3f} {conf_str[mask].mean():>10.4f}')
-        print(f'{"ALL":<12} {n_entries:>4}  {pred_lp.mean():>10.3f} {gt_lp.mean():>10.3f} {r_str.mean():>10.3f} {conf_str.mean():>10.4f}')
+            print(f'{cat:<12} {mask.sum():>4}  {pred_lp[mask].mean():>10.3f} {gt_lp[mask].mean():>10.3f} {lo_str[mask].mean():>10.3f} {conf_str[mask].mean():>10.4f}')
+        print(f'{"ALL":<12} {n_entries:>4}  {pred_lp.mean():>10.3f} {gt_lp.mean():>10.3f} {lo_str.mean():>10.3f} {conf_str.mean():>10.4f}')
 
         # Per-sample STR scores (descending by score_str)
         sorted_idx = np.argsort(-conf_str)
@@ -676,7 +699,7 @@ def main():
         w = csv.writer(f)
         header = ['dataset_name', 'image_index', 'pred', 'gt', 'PL', 'category']
         if use_str:
-            header += ['pred_lp', 'gt_lp', 'r_str', 'score_str']
+            header += ['pred_lp', 'gt_lp', 'lo_str', 'score_str']
             if has_stages:
                 header += ['pred_ar_lp', 'pred_cloze_lp', 'gt_ar_lp', 'gt_cloze_lp']
         if use_llm:
@@ -687,7 +710,7 @@ def main():
         for i, e in enumerate(entries):
             row = [e['dataset_name'], e['image_index'], e['pred'], e['gt'], e['PL'], e['category']]
             if use_str:
-                row += [f'{pred_lp[i]:.4f}', f'{gt_lp[i]:.4f}', f'{r_str[i]:.4f}', f'{conf_str[i]:.4f}']
+                row += [f'{pred_lp[i]:.4f}', f'{gt_lp[i]:.4f}', f'{lo_str[i]:.4f}', f'{conf_str[i]:.4f}']
                 if has_stages:
                     pc = per_char_list[i] if per_char_list else {}
                     row += [f'{pc.get("pred_ar_lp", 0):.4f}', f'{pc.get("pred_cloze_lp", 0):.4f}',
@@ -704,17 +727,17 @@ def main():
         'PL=pred': '#e74c3c',
         'PL=gt': '#2ecc71',
         'PL=other': '#3498db',
-        'blank': '#95a5a6',
+        'other': '#95a5a6',
     }
-    labels_order = ['PL=pred', 'PL=gt', 'PL=other', 'blank']
+    labels_order = ['PL=pred', 'PL=gt', 'PL=other', 'other']
     cats_present = [c for c in labels_order if any(e['category'] == c for e in entries)]
     bins = np.linspace(0.0, 1.0, 41)
 
     score_data = []
     if use_str:
-        score_data.append(('STR only', 'σ(r_STR)', conf_str))
+        score_data.append(('STR only', 'σ(lo_STR)', conf_str))
     if use_llm:
-        score_data.append(('LLM only', 'σ(r_LLM)', conf_llm))
+        score_data.append(('LLM only', 'σ(lo_LLM)', conf_llm))
     if use_str and use_llm:
         score_data.append((f'Fusion (α={alpha})', f'α·STR + (1-α)·LLM', conf_fusion))
 

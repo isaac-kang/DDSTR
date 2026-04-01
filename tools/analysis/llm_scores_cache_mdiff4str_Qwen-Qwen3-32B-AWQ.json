@@ -1,0 +1,1524 @@
+{
+  "llm_model": "Qwen/Qwen3-32B-AWQ",
+  "scores": [
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 346,
+      "pred": "LADAG",
+      "gt": "LAOAG",
+      "lo_llm": -6.703125105123036
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 998,
+      "pred": "Tne",
+      "gt": "The",
+      "lo_llm": -8.578125443891622
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 746,
+      "pred": "Poul",
+      "gt": "Day",
+      "lo_llm": -0.25
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1183,
+      "pred": "cafe",
+      "gt": "caf",
+      "lo_llm": 6.531250007566996
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 999,
+      "pred": "Lookouts",
+      "gt": "Lookout",
+      "lo_llm": -2.4062499329447746
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1503,
+      "pred": "O",
+      "gt": "OI",
+      "lo_llm": -1.6874999552965164
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 252,
+      "pred": "9",
+      "gt": "a",
+      "lo_llm": -0.8750000596046448
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 516,
+      "pred": "Arnrsen",
+      "gt": "Arntsen",
+      "lo_llm": -3.656249986961484
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1286,
+      "pred": "failte",
+      "gt": "filte",
+      "lo_llm": 1.1562500298023224
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 283,
+      "pred": "Obloom",
+      "gt": "bloom",
+      "lo_llm": -3.2812499329447746
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2003,
+      "pred": "SALLI",
+      "gt": "SAW",
+      "lo_llm": -0.9999999403953552
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 696,
+      "pred": "Lydney",
+      "gt": "Lgdney",
+      "lo_llm": 6.937499769963324
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 901,
+      "pred": "Gwalia",
+      "gt": "gwaliab",
+      "lo_llm": 2.8437499552965164
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 747,
+      "pred": "Breamer",
+      "gt": "Dreamer",
+      "lo_llm": -5.374999937135726
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 896,
+      "pred": "29721",
+      "gt": "20721",
+      "lo_llm": -2.0937500968575478
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1123,
+      "pred": "Wenlen",
+      "gt": "menlen",
+      "lo_llm": 1.5937500447034836
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1669,
+      "pred": "Fashiorustas",
+      "gt": "Fashionistas",
+      "lo_llm": -13.20312500003638
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2016,
+      "pred": "BONALD",
+      "gt": "RONALD",
+      "lo_llm": -10.046874883155397
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 1388,
+      "pred": "Alugntop",
+      "gt": "Aluontop",
+      "lo_llm": -1.8437499552965164
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2008,
+      "pred": "MAH",
+      "gt": "MAN",
+      "lo_llm": -3.7499999590218067
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2074,
+      "pred": "wystepula:",
+      "gt": "wystepuJa:",
+      "lo_llm": -2.3125000298023224
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2105,
+      "pred": "\"rRON",
+      "gt": "TRON",
+      "lo_llm": -0.7812499701976776
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2338,
+      "pred": "bruno's",
+      "gt": "brno's",
+      "lo_llm": 0.6249999701976776
+    },
+    {
+      "dataset_name": "IIIT5k",
+      "image_index": 2211,
+      "pred": "D@bbc",
+      "gt": "D@bbe'",
+      "lo_llm": -1.7500000447034836
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 492,
+      "pred": "DEL",
+      "gt": "DELI",
+      "lo_llm": -2.843750022351742
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 572,
+      "pred": "JISIA",
+      "gt": "ASU",
+      "lo_llm": -1.0625000298023224
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 590,
+      "pred": "GYB",
+      "gt": "cvs",
+      "lo_llm": -0.8750000298023224
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 630,
+      "pred": "LOUNGE",
+      "gt": "LOUNIE",
+      "lo_llm": 6.0937500493600965
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 146,
+      "pred": "Soodique",
+      "gt": "Sportique",
+      "lo_llm": -4.531250219792128
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 436,
+      "pred": "REDWED",
+      "gt": "REDWD",
+      "lo_llm": -0.28125
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 541,
+      "pred": "HOULIH",
+      "gt": "HOULIHA'",
+      "lo_llm": -3.6562499199062586
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 203,
+      "pred": "MOTORiPORTS",
+      "gt": "MOTORSPORTS",
+      "lo_llm": -12.656249523393853
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 641,
+      "pred": "CHEUYRONT",
+      "gt": "CHEUVRONT",
+      "lo_llm": -6.374999877647497
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 61,
+      "pred": "ANAFEIM",
+      "gt": "ANAHEIM",
+      "lo_llm": -13.328124882380507
+    },
+    {
+      "dataset_name": "SVT",
+      "image_index": 431,
+      "pred": "cap@GIRO",
+      "gt": "CaPOGIRO",
+      "lo_llm": -0.84375
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 591,
+      "pred": "guice",
+      "gt": "guide",
+      "lo_llm": -4.8437500186264515
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 426,
+      "pred": "Limied",
+      "gt": "Limted",
+      "lo_llm": 0.6562500596046448
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 185,
+      "pred": "lan",
+      "gt": "Ian",
+      "lo_llm": -3.531249964609742
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 144,
+      "pred": "Chocome",
+      "gt": "Chocomel",
+      "lo_llm": -5.468750124331564
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 248,
+      "pred": "Informal",
+      "gt": "Informat",
+      "lo_llm": 2.531250014901161
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 188,
+      "pred": "Verbandsteffe",
+      "gt": "Verbandstoffe",
+      "lo_llm": -11.593750358082616
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 26,
+      "pred": "EASTEURANT",
+      "gt": "GASTRONOMY",
+      "lo_llm": -1.6875000298023224
+    },
+    {
+      "dataset_name": "IC13_857",
+      "image_index": 817,
+      "pred": "ieanswear",
+      "gt": "jeanswear",
+      "lo_llm": -9.359375127241947
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 67,
+      "pred": "Rd)",
+      "gt": "RdJ",
+      "lo_llm": -0.25
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 973,
+      "pred": "Peperon",
+      "gt": "Peperor",
+      "lo_llm": -2.8749999217689037
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1616,
+      "pred": "CHLAXLIE",
+      "gt": "CHAXLIE",
+      "lo_llm": -4.062500001862645
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1441,
+      "pred": "SYMPHORI",
+      "gt": "SYMPHONY",
+      "lo_llm": -6.687500210828148
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 69,
+      "pred": "12R",
+      "gt": "I2R",
+      "lo_llm": -0.53125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 991,
+      "pred": "SEPA",
+      "gt": "SEPH",
+      "lo_llm": 0.5937499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 257,
+      "pred": "Experience",
+      "gt": "Boerien",
+      "lo_llm": 0.6249999701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1166,
+      "pred": "OYSTER",
+      "gt": "OYS",
+      "lo_llm": 4.437499928288162
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 598,
+      "pred": "loast",
+      "gt": "toast",
+      "lo_llm": -9.187500126645318
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 374,
+      "pred": "TAG",
+      "gt": "JAG",
+      "lo_llm": -0.9374999403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1174,
+      "pred": "Kinokuniva",
+      "gt": "Kinokuniya",
+      "lo_llm": -8.781250018364517
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 833,
+      "pred": "lines",
+      "gt": "ios",
+      "lo_llm": 0.0625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1125,
+      "pred": "Iniversary",
+      "gt": "Anniversary",
+      "lo_llm": -9.906250120951881
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 718,
+      "pred": "Crabtree",
+      "gt": "Crahtree",
+      "lo_llm": 2.5625000596046448
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 743,
+      "pred": "7",
+      "gt": "ELEVEN",
+      "lo_llm": -3.8437500819563866
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 995,
+      "pred": "Core",
+      "gt": "Care",
+      "lo_llm": 0.375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1228,
+      "pred": "Deautyersutor",
+      "gt": "eauty",
+      "lo_llm": -2.3125000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 840,
+      "pred": "S1S",
+      "gt": "SIS",
+      "lo_llm": -0.9375000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1085,
+      "pred": "SALES",
+      "gt": "SALE",
+      "lo_llm": -4.031249882653356
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 575,
+      "pred": "rplace",
+      "gt": "place",
+      "lo_llm": -10.656250239590008
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1074,
+      "pred": "colectpoint",
+      "gt": "collectpoint",
+      "lo_llm": -10.859375120297045
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 835,
+      "pred": "sma",
+      "gt": "sme",
+      "lo_llm": -0.5624999403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1134,
+      "pred": "Loon",
+      "gt": "Soon",
+      "lo_llm": 0.375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 845,
+      "pred": "SITTIES",
+      "gt": "STHES",
+      "lo_llm": -0.46875
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1620,
+      "pred": "CINEPLEX",
+      "gt": "CINEPLE",
+      "lo_llm": 5.34375001816079
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 281,
+      "pred": "Tony's",
+      "gt": "Tonajs",
+      "lo_llm": 1.8437500298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1333,
+      "pred": "LE",
+      "gt": "ALE",
+      "lo_llm": -4.156249833293259
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 979,
+      "pred": "GORBANO",
+      "gt": "GIORDANO",
+      "lo_llm": -3.7500001173466444
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 969,
+      "pred": "Leaff",
+      "gt": "Leaf",
+      "lo_llm": -7.968749953754013
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 663,
+      "pred": "ROWNSONS",
+      "gt": "ROBINSONS",
+      "lo_llm": -6.6562501717126
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1143,
+      "pred": "soov",
+      "gt": "Soon",
+      "lo_llm": -6.062500228174031
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 601,
+      "pred": "Coca",
+      "gt": "food",
+      "lo_llm": 1.3437500298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1501,
+      "pred": "WAKAI",
+      "gt": "WAKA",
+      "lo_llm": -0.03125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 915,
+      "pred": "IRISH",
+      "gt": "RUSH",
+      "lo_llm": -1.2500000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 198,
+      "pred": "char",
+      "gt": "cha",
+      "lo_llm": 1.3749999701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 304,
+      "pred": "watso",
+      "gt": "wotso",
+      "lo_llm": -0.5937499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1169,
+      "pred": "WORLD",
+      "gt": "RLD",
+      "lo_llm": 5.687500055646524
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1777,
+      "pred": "Supplier",
+      "gt": "Supplies",
+      "lo_llm": -0.78125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 411,
+      "pred": "aigonLofut",
+      "gt": "aigonLotus",
+      "lo_llm": -7.765624888415914
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1532,
+      "pred": "BOMEGA",
+      "gt": "BEEGA",
+      "lo_llm": -1.2187500298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1294,
+      "pred": "NIRE",
+      "gt": "NTRE",
+      "lo_llm": -0.8125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 939,
+      "pred": "rep",
+      "gt": "repu",
+      "lo_llm": -3.7499998919665813
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 603,
+      "pred": "Chimmey",
+      "gt": "chimney",
+      "lo_llm": -10.562499643114279
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 267,
+      "pred": "CHOO",
+      "gt": "CHO",
+      "lo_llm": 1.3437499552965164
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1353,
+      "pred": "SOLDES",
+      "gt": "OLDES",
+      "lo_llm": 1.0312500298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1022,
+      "pred": "BACK!",
+      "gt": "BACKI",
+      "lo_llm": 0.6875000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 568,
+      "pred": "ctions",
+      "gt": "tions",
+      "lo_llm": 0.125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 438,
+      "pred": "Organic",
+      "gt": "Organto",
+      "lo_llm": 4.937500037718564
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1056,
+      "pred": "Standard",
+      "gt": "Standart",
+      "lo_llm": 3.812499927356839
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 197,
+      "pred": "DARLIE",
+      "gt": "DARUE",
+      "lo_llm": 0.34375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1418,
+      "pred": "MIBECE",
+      "gt": "RIBEC",
+      "lo_llm": -0.25
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 169,
+      "pred": "zaxy",
+      "gt": "ZONY",
+      "lo_llm": -0.9687499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 917,
+      "pred": "Glauc",
+      "gt": "GIANT",
+      "lo_llm": -2.687500052154064
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 690,
+      "pred": "Stipe",
+      "gt": "strip",
+      "lo_llm": 0.46875
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 626,
+      "pred": "DUSOL",
+      "gt": "SOL",
+      "lo_llm": -0.15625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 749,
+      "pred": "m",
+      "gt": "Inn",
+      "lo_llm": -2.874999951571226
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1768,
+      "pred": "SHURT",
+      "gt": "SHORT",
+      "lo_llm": -8.218749692896381
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 693,
+      "pred": "STORE",
+      "gt": "SORE",
+      "lo_llm": 0.25
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1051,
+      "pred": "Coffee",
+      "gt": "Coffes",
+      "lo_llm": 5.999999766703695
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1499,
+      "pred": "WAKAI",
+      "gt": "WAKA",
+      "lo_llm": -0.03125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1765,
+      "pred": "atu",
+      "gt": "ature",
+      "lo_llm": -7.437500062689651
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 642,
+      "pred": "G2OC",
+      "gt": "G20",
+      "lo_llm": -4.49999990966171
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1379,
+      "pred": "ATBRUST",
+      "gt": "CITY",
+      "lo_llm": -3.875000063329935
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1654,
+      "pred": "Level",
+      "gt": "LEVE",
+      "lo_llm": 3.6875000316649675
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 700,
+      "pred": "INDI.",
+      "gt": "IND",
+      "lo_llm": -0.3125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1276,
+      "pred": "SAVOUR",
+      "gt": "SAYOUR",
+      "lo_llm": 1.2812500149011612
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 275,
+      "pred": "Snacks",
+      "gt": "Snecks",
+      "lo_llm": 2.937499985098839
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 822,
+      "pred": "OODI",
+      "gt": "ODI",
+      "lo_llm": -1.1874999403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 750,
+      "pred": "FOD",
+      "gt": "OOD",
+      "lo_llm": -0.8437499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1371,
+      "pred": "ROOM",
+      "gt": "ROOK",
+      "lo_llm": -0.5625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1364,
+      "pred": "SALE",
+      "gt": "SLE",
+      "lo_llm": 6.499999828403816
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 723,
+      "pred": "billie",
+      "gt": "billlie",
+      "lo_llm": -2.0937500596046448
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1105,
+      "pred": "swatch",
+      "gt": "swatc",
+      "lo_llm": 7.093749871943146
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1200,
+      "pred": "Kilein",
+      "gt": "Klein",
+      "lo_llm": -5.718750111293048
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 566,
+      "pred": "ALLUTT",
+      "gt": "alluti",
+      "lo_llm": -1.15625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1387,
+      "pred": "RAUGO",
+      "gt": "RAUCO",
+      "lo_llm": -2.4062499925494194
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 639,
+      "pred": "Cnr",
+      "gt": "CAP",
+      "lo_llm": -0.15625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 686,
+      "pred": "STORE",
+      "gt": "ORE",
+      "lo_llm": 3.1250000558793545
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1569,
+      "pred": "KINGS",
+      "gt": "KINOS",
+      "lo_llm": 1.0312499403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1204,
+      "pred": "IORCHARD",
+      "gt": "ORCHARD",
+      "lo_llm": -10.90624988126001
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 850,
+      "pred": "iett",
+      "gt": "Eett",
+      "lo_llm": -1.8125000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 895,
+      "pred": "esplanate",
+      "gt": "esplanade",
+      "lo_llm": -20.0
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1259,
+      "pred": "MARC",
+      "gt": "HARC",
+      "lo_llm": 2.906249947845936
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1386,
+      "pred": "WORKSHOPELENS",
+      "gt": "WORKSHOPELEM",
+      "lo_llm": -1.71875
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 110,
+      "pred": "comin",
+      "gt": "comi",
+      "lo_llm": 3.3437499031424522
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 942,
+      "pred": "CRISIDA",
+      "gt": "CRYSTAL",
+      "lo_llm": -3.312499947845936
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 471,
+      "pred": "VERSATILITY",
+      "gt": "YERSATIUITT",
+      "lo_llm": 4.843750000931323
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1759,
+      "pred": "Maccha",
+      "gt": "accha",
+      "lo_llm": 1.2500000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1689,
+      "pred": "Bags",
+      "gt": "Book",
+      "lo_llm": -0.40625
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1355,
+      "pred": "SOLDES",
+      "gt": "SOLDE",
+      "lo_llm": -2.4374999180436134
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 605,
+      "pred": "Chinnne",
+      "gt": "Chimney",
+      "lo_llm": -4.499999781139195
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 537,
+      "pred": "THIOT",
+      "gt": "THT",
+      "lo_llm": -0.5625000596046448
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1199,
+      "pred": "Colvin",
+      "gt": "Calvin",
+      "lo_llm": -1.2499999701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 624,
+      "pred": "SRSTE",
+      "gt": "STERN",
+      "lo_llm": -4.687500117346644
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 622,
+      "pred": "SHAHI",
+      "gt": "SAHI",
+      "lo_llm": -3.218749973922968
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1097,
+      "pred": "SALE",
+      "gt": "NALE",
+      "lo_llm": 9.125000125422957
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 350,
+      "pred": "Relishing",
+      "gt": "Refishing",
+      "lo_llm": -0.5312499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1751,
+      "pred": "SABRINAGON",
+      "gt": "SADRINAGO",
+      "lo_llm": 0.6562499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1591,
+      "pred": "CATHAY",
+      "gt": "CATHA",
+      "lo_llm": 6.781249961350113
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 395,
+      "pred": "Relishing",
+      "gt": "Refishing",
+      "lo_llm": -0.5312499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1385,
+      "pred": "WALKER",
+      "gt": "WALKIN",
+      "lo_llm": 0.5624999701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 322,
+      "pred": "Edition",
+      "gt": "Eailian",
+      "lo_llm": 3.156250011175871
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 40,
+      "pred": "VEHICLES",
+      "gt": "VEICHLES",
+      "lo_llm": 2.6562499552965164
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1748,
+      "pred": "RENAZA",
+      "gt": "RENANZA",
+      "lo_llm": -5.937499932013452
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 419,
+      "pred": "PLAY",
+      "gt": "PLAN",
+      "lo_llm": -0.9687499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1077,
+      "pred": "Eappp",
+      "gt": "poix",
+      "lo_llm": 0.4375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1360,
+      "pred": "DREVER",
+      "gt": "OREVER",
+      "lo_llm": 1.9999999105930328
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 373,
+      "pred": "STAGHE",
+      "gt": "TAGH",
+      "lo_llm": 0.34375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1653,
+      "pred": "erages",
+      "gt": "IES",
+      "lo_llm": -0.8125000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 468,
+      "pred": "FARM",
+      "gt": "FARN",
+      "lo_llm": 4.7500000689178705
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1592,
+      "pred": "JAN:2015",
+      "gt": "JAN",
+      "lo_llm": 0.21875
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1384,
+      "pred": "WORKSHOPEI",
+      "gt": "WORKSHOPE",
+      "lo_llm": -2.3437500596046448
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 21,
+      "pred": "BEROMI",
+      "gt": "AIROB",
+      "lo_llm": -0.9374999701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1758,
+      "pred": "cclator",
+      "gt": "calator",
+      "lo_llm": -6.37499982281588
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 64,
+      "pred": "Hougang",
+      "gt": "Haugang",
+      "lo_llm": 0.3125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1335,
+      "pred": "CpiCentre",
+      "gt": "epiCentre",
+      "lo_llm": -4.718749986961484
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1289,
+      "pred": "TOYOTS",
+      "gt": "Timms",
+      "lo_llm": -0.7812499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 696,
+      "pred": "STORE",
+      "gt": "ORE",
+      "lo_llm": 3.1250000558793545
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1238,
+      "pred": "050X",
+      "gt": "GEOX",
+      "lo_llm": -2.6875001043081284
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 324,
+      "pred": "losoforwitpary",
+      "gt": "TEN",
+      "lo_llm": -3.031249951571226
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1604,
+      "pred": "NAME",
+      "gt": "NAM",
+      "lo_llm": 5.875000156695023
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 852,
+      "pred": "tipper",
+      "gt": "figger",
+      "lo_llm": -1.1875000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1675,
+      "pred": "WAITINGFOR",
+      "gt": "GIO",
+      "lo_llm": 0.8437499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 302,
+      "pred": "Relishing",
+      "gt": "Reking",
+      "lo_llm": 1.8749999850988388
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 945,
+      "pred": "TOWER",
+      "gt": "Towe",
+      "lo_llm": 6.562500106985681
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 625,
+      "pred": "BEAUTV",
+      "gt": "BEAUTY",
+      "lo_llm": -9.843749883933924
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 220,
+      "pred": "Doraemon",
+      "gt": "Doraeman",
+      "lo_llm": 4.593750110827386
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 579,
+      "pred": "OPEN",
+      "gt": "OPE",
+      "lo_llm": 5.562499827006832
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 619,
+      "pred": "SZECUAN",
+      "gt": "ECHUAN",
+      "lo_llm": -2.1874999403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 728,
+      "pred": "HOSEREEL",
+      "gt": "HOSEREEH",
+      "lo_llm": 4.312499823048711
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1423,
+      "pred": "cpicentre",
+      "gt": "epiCentre",
+      "lo_llm": -5.281249777879566
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 241,
+      "pred": "dessert",
+      "gt": "ceve",
+      "lo_llm": 4.062499929219484
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 222,
+      "pred": "TEHT",
+      "gt": "TEMT",
+      "lo_llm": -3.3124999031424522
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 772,
+      "pred": "way",
+      "gt": "ivay",
+      "lo_llm": 2.812500026077032
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1442,
+      "pred": "CHY0n",
+      "gt": "CHABU",
+      "lo_llm": -0.8437499701976776
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1033,
+      "pred": "ShUATELIER",
+      "gt": "shuaTELER",
+      "lo_llm": 0.09375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1236,
+      "pred": "THREESTXTY",
+      "gt": "THREESIXTY",
+      "lo_llm": -6.250000060303137
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 270,
+      "pred": "OILETRIES",
+      "gt": "OILETREIES",
+      "lo_llm": -2.406249910593033
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1114,
+      "pred": "SINCE",
+      "gt": "SINC",
+      "lo_llm": 4.968749925028533
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 555,
+      "pred": "DOHT",
+      "gt": "dont",
+      "lo_llm": -6.406250085216016
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 533,
+      "pred": "SKINCARE",
+      "gt": "SINCLARE",
+      "lo_llm": 0.7500000298023224
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 473,
+      "pred": "MAKEA",
+      "gt": "HARA",
+      "lo_llm": -1.2500000596046448
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 792,
+      "pred": "Woolaomoolao",
+      "gt": "woobo",
+      "lo_llm": -0.4375
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1339,
+      "pred": "cpicentre",
+      "gt": "epiCentre",
+      "lo_llm": -5.249999900814146
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 79,
+      "pred": "IGGULDEN",
+      "gt": "GGULDEN",
+      "lo_llm": 0.25
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1373,
+      "pred": "SECOIL",
+      "gt": "ECOIL",
+      "lo_llm": -1.0312499403953552
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1167,
+      "pred": "MoaRteN",
+      "gt": "MAARteN",
+      "lo_llm": -0.53125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1772,
+      "pred": "CREAMERY",
+      "gt": "CREAME",
+      "lo_llm": 3.2500000968575478
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1052,
+      "pred": "PESHZUNCOFFEEDAN",
+      "gt": "SSI",
+      "lo_llm": -0.28125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1443,
+      "pred": "CHABUTON",
+      "gt": "CHANBUTON",
+      "lo_llm": -1.125
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 986,
+      "pred": "REACH",
+      "gt": "Tvo",
+      "lo_llm": 2.8437501043081284
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 353,
+      "pred": "ST",
+      "gt": "CARE",
+      "lo_llm": -2.8749999962747097
+    },
+    {
+      "dataset_name": "IC15_1811",
+      "image_index": 1029,
+      "pred": "JEWELLERY",
+      "gt": "JEWERLERY",
+      "lo_llm": 2.7500000037252903
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 455,
+      "pred": "MAREHOUSE",
+      "gt": "WAREHOUSE",
+      "lo_llm": -12.828125119273864
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 454,
+      "pred": "PLAGHETTI",
+      "gt": "SPAGHETTI",
+      "lo_llm": -13.187500238462235
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 235,
+      "pred": "cafe",
+      "gt": "caf",
+      "lo_llm": 6.531250007566996
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 465,
+      "pred": "PAR",
+      "gt": "PAK",
+      "lo_llm": -1.1250000298023224
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 200,
+      "pred": "CRISH",
+      "gt": "CRUSH",
+      "lo_llm": -9.124999897394446
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 307,
+      "pred": "Vecnon",
+      "gt": "Vernon",
+      "lo_llm": -4.937500131782144
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 237,
+      "pred": "cafe",
+      "gt": "caf",
+      "lo_llm": 6.531250007566996
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 541,
+      "pred": "PARO",
+      "gt": "PARC",
+      "lo_llm": -1.9687499403953552
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 39,
+      "pred": "7UB",
+      "gt": "FZU",
+      "lo_llm": -0.4375
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 255,
+      "pred": "Angelo",
+      "gt": "Angela",
+      "lo_llm": -1.3437500447034836
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 157,
+      "pred": "Michael",
+      "gt": "Michaels",
+      "lo_llm": 0.7500000596046448
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 59,
+      "pred": "PIGNEER",
+      "gt": "PIONEER",
+      "lo_llm": -13.499999880923497
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 62,
+      "pred": "ARLSORO",
+      "gt": "ARLBORO",
+      "lo_llm": -6.21874989871867
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 507,
+      "pred": "LOUNIE",
+      "gt": "LOUNGE",
+      "lo_llm": -9.328124529551133
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 537,
+      "pred": "Odando",
+      "gt": "Orlando",
+      "lo_llm": -7.093749892956112
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 271,
+      "pred": "Donate",
+      "gt": "DONALD",
+      "lo_llm": -0.3125
+    },
+    {
+      "dataset_name": "SVTP",
+      "image_index": 511,
+      "pred": "BELVEDE",
+      "gt": "BELVEDERE",
+      "lo_llm": -12.484374761716026
+    },
+    {
+      "dataset_name": "CUTE80",
+      "image_index": 124,
+      "pred": "IST.",
+      "gt": "1ST.",
+      "lo_llm": -4.468749940395355
+    },
+    {
+      "dataset_name": "CUTE80",
+      "image_index": 259,
+      "pred": "BARREQUE",
+      "gt": "BARBEQUE",
+      "lo_llm": -10.437499763123924
+    },
+    {
+      "dataset_name": "CUTE80",
+      "image_index": 265,
+      "pred": "8",
+      "gt": "to",
+      "lo_llm": -2.124999925494194
+    },
+    {
+      "dataset_name": "CUTE80",
+      "image_index": 169,
+      "pred": "CHRUSTMAS",
+      "gt": "CHRISTMAS",
+      "lo_llm": -12.62500035784069
+    }
+  ]
+}
